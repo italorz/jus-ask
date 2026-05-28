@@ -1,21 +1,17 @@
-
 #!/bin/bash
 
-# Remove o location / duplicado do nginx.conf gerado pelo Nixpacks
-python3 - <<'EOF'
-import re
+# Corrige o location / duplicado usando sed
+sed -i '0,/location \/ {/{/location \/ {/!{/location \/ {/d}}' /nginx.conf
 
-with open('/nginx.conf', 'r') as f:
-    content = f.read()
-
-# Remove o segundo bloco location /
-pattern = r'(\s+location / \{[^}]+\})(.*?)(\s+location / \{[^}]+\})'
-fixed = re.sub(pattern, r'\1', content, flags=re.DOTALL)
-
-with open('/nginx.conf', 'w') as f:
-    f.write(fixed)
-
-print("nginx.conf fixed!")
-EOF
-
-exec supervisord -c /etc/supervisor/conf.d/supervisord.conf
+# Tenta encontrar o supervisord
+if command -v supervisord &> /dev/null; then
+    exec supervisord
+elif [ -f /usr/bin/supervisord ]; then
+    exec /usr/bin/supervisord
+elif [ -f /usr/local/bin/supervisord ]; then
+    exec /usr/local/bin/supervisord
+else
+    # Inicia nginx e php-fpm diretamente
+    php-fpm &
+    nginx -g "daemon off;"
+fi
