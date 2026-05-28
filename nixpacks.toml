@@ -1,2 +1,17 @@
+# Coolify/Railway usam Nixpacks. O provider de PHP detecta o Laravel
+# e configura nginx + php-fpm automaticamente; o provider de Node
+# instala as dependências do package.json.
+
+# Compila os assets de front-end (Vite/Bootstrap) e otimiza o
+# autoloader durante o build. O diretorio /public/build esta no
+# .gitignore, entao precisa ser gerado aqui — sem isso a aplicacao
+# sobe sem CSS/JS.
+[phases.build]
+dependsOn = ["install"]
+cmds = [
+    "npm run build",
+    "composer install --no-dev --optimize-autoloader --no-interaction",
+]
+
 [start]
 cmd = "bash /app/start.sh"
