@@ -18,7 +18,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->environment('production')) {
-            URL::forceReScheme(config('app.url') ? parse_url(config('app.url'), PHP_URL_SCHEME) : 'https');
+            URL::forceScheme(config('app.url') ? parse_url(config('app.url'), PHP_URL_SCHEME) : 'https');
         }
         Gate::define('super-admin', fn (User $user) => $user->isSuperAdmin());
     }
