@@ -25,6 +25,7 @@ class Cliente extends Model
         'cidade',
         'estado',
         'cep',
+        'chave_gemini_id',
     ];
 
     public function processos(): HasMany

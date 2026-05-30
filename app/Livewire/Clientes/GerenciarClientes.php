@@ -243,6 +243,7 @@ class GerenciarClientes extends Component
     public function excluirProcesso(int $id): void
     {
         Processo::findOrFail($id)->delete();
+        $this->resetProcessoForm();
         session()->flash('status', 'Processo removido.');
     }
 

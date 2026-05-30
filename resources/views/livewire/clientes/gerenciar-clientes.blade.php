@@ -107,9 +107,9 @@
                                     <button wire:click="$set('abaAtiva','processos')"
                                             class="nav-link {{ $abaAtiva === 'processos' ? 'active' : '' }}">
                                         Processos
-                                        @if ($clienteId && Processo::where('cliente_id', $clienteId)->exists())
+                                        @if ($processos->isNotEmpty())
                                             <span class="badge bg-secondary ms-1">
-                                                {{ Processo::where('cliente_id', $clienteId)->count() }}
+                                                {{ $processos->count() }}
                                             </span>
                                         @endif
                                     </button>

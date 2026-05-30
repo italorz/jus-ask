@@ -21,9 +21,10 @@ class TokenController extends Controller
 
     public function store(Request $request)
     {
-        dd($request->all());
+        // dd($request->all());
         TokenCnj::create([
             'token' => $request->input('token'),
         ]);
+        return back();
     }
 }
