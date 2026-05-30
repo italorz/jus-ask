@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["nodejs_22", "php83", "php83Packages.composer", "python311Packages.supervisor"]
+nixPkgs = ["nodejs_22", "php83", "php83Packages.composer", "nginx", "python311Packages.supervisor"]
 
 [phases.build]
 cmds = [
