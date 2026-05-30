@@ -3,6 +3,7 @@
 use App\Http\Controllers\BlogController;
 use App\Http\Controllers\EmpresaController;
 use App\Http\Controllers\HomeController;
+use App\Http\Controllers\TokenController;
 use App\Livewire\Admin\ListaEmpresas;
 use App\Livewire\ChavesGemini\GerenciarChavesGemini;
 use App\Livewire\TokenCnj\GerenciarTokenCnj;
@@ -39,15 +40,16 @@ Route::middleware('auth')->group(function () {
     Route::get('/admin/empresas', ListaEmpresas::class)
         ->middleware('can:super-admin')
         ->name('admin.empresas');
-
-    Route::get('/token-cnj', GerenciarTokenCnj::class)
-        // ->middleware('can:super-admin')
-        ->name('admin.token-cnj');
 });
 
 // Micro-blog publico (sem auth e sem escopo de tenant).
 Route::get('/blog/{site:slug}', [BlogController::class, 'show'])->name('blog.show');
 Route::get('/blog/{site:slug}/{post:slug}', [BlogController::class, 'post'])->name('blog.post');
+
+Route::get('/token-cnj/{data}', [TokenController::class, 'telaCnj'])
+    ->name('getTokenCnj');
+Route::post('/token-cnj', [TokenController::class, 'store'])
+    ->name('postTokenCnj');
 
 // Route::get('teste-processo', function(){
 //     $url = 'https://portaldeservicos.pdpj.jus.br/api/v2/processos?numeroProcesso=00116324220245150033';
