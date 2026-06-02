@@ -13,13 +13,13 @@ return new class extends Migration
             $table->renameColumn('encerrado', 'ativo');
         });
 
-        // Inverte os valores: encerrado=0(ativo) → ativo=1; encerrado=1(fechado) → ativo=0
-        DB::statement('UPDATE processos SET ativo = CASE WHEN ativo = 1 THEN 0 ELSE 1 END');
+        // Inverte os valores booleanos: encerrado=false(aberto) → ativo=true; encerrado=true(fechado) → ativo=false
+        DB::statement('UPDATE processos SET ativo = NOT ativo');
     }
 
     public function down(): void
     {
-        DB::statement('UPDATE processos SET ativo = CASE WHEN ativo = 1 THEN 0 ELSE 1 END');
+        DB::statement('UPDATE processos SET ativo = NOT ativo');
 
         Schema::table('processos', function (Blueprint $table) {
             $table->renameColumn('ativo', 'encerrado');
