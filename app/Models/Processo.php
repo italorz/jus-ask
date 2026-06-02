@@ -13,13 +13,15 @@ class Processo extends Model
 
     protected $table = 'processos';
 
+    protected $attributes = ['ativo' => true];
+
     protected $fillable = [
         'cliente_id',
         'empresa_id',
         'tenant',
         'numero',
         'ultima_atualizacao',
-        'encerrado',
+        'ativo',
         'data_hora_ajuizamento',
         'valor_acao',
         'data_hora_ultima_distribuicao',
@@ -30,7 +32,7 @@ class Processo extends Model
     {
         return [
             'ultima_atualizacao'            => 'datetime',
-            'encerrado'                     => 'boolean',
+            'ativo'                         => 'boolean',
             'data_hora_ajuizamento'         => 'datetime',
             'data_hora_ultima_distribuicao' => 'datetime',
             'valor_acao'                    => 'decimal:2',
@@ -50,5 +52,15 @@ class Processo extends Model
     public function processosConteudos(): HasMany
     {
         return $this->hasMany(ProcessoConteudo::class);
+    }
+
+    public function contatos(): HasMany
+    {
+        return $this->hasMany(ProcessoContato::class);
+    }
+
+    public function notificacoes(): HasMany
+    {
+        return $this->hasMany(Notificacao::class);
     }
 }

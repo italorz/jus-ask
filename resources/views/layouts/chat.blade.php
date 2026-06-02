@@ -82,10 +82,51 @@
 
         /* Typing dots */
         .typing-dots { display: flex; gap: 4px; align-items: center; padding: 4px 2px; }
-        .typing-dot  { width: 8px; height: 8px; background: #aaa; border-radius: 50%; animation: blink 1.3s infinite; }
+        .typing-dot  { width: 8px; height: 8px; background: #888; border-radius: 50%; animation: blink 1.3s infinite; }
         .typing-dot:nth-child(2) { animation-delay: .2s; }
         .typing-dot:nth-child(3) { animation-delay: .4s; }
-        @keyframes blink { 0%,80%,100% { opacity: .15 } 40% { opacity: 1 } }
+        @keyframes blink { 0%,80%,100% { transform: translateY(0); opacity: .25 } 40% { transform: translateY(-4px); opacity: 1 } }
+
+        /* Indicador "Assistente está digitando" — logo acima da barra de input */
+        #typing-indicator {
+            display: none;                 /* alternado pelo wire:loading */
+            align-items: center;
+            padding: 6px 16px 10px;
+            background: #e5ddd5;           /* combina com a área de mensagens */
+            flex-shrink: 0;
+            animation: typing-slide-in .25s ease;
+        }
+        #typing-indicator .ti-avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: #25d366;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: .95rem;
+            flex-shrink: 0;
+            margin-right: 8px;
+        }
+        #typing-indicator .ti-bubble {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: #fff;
+            border-radius: 8px;
+            border-bottom-left-radius: 2px;
+            box-shadow: 0 1px 1px rgba(0,0,0,.1);
+            padding: 8px 14px;
+        }
+        #typing-indicator .ti-label {
+            font-size: .8rem;
+            color: #888;
+            font-style: italic;
+        }
+        @keyframes typing-slide-in {
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
 
         #chat-input-bar {
             display: flex;

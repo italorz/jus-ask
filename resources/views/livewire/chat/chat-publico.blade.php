@@ -1,4 +1,4 @@
-<div id="chat-wrapper">
+<div id="chat-wrapper" wire:poll.300s="verificarSessao">
 
     {{-- Modal de identificação --}}
     @if (! $identificado)
@@ -50,7 +50,7 @@
                                    font-family:inherit;transition:background .2s;"
                         >
                             <span wire:loading.remove wire:target="identificar">Entrar no chat</span>
-                            <span wire:loading wire:target="identificar">Verificando...</span>
+                            <span wire:loading wire:target="identificar">Preparando o assistente...</span>
                         </button>
                     </form>
                 </div>
@@ -77,29 +77,19 @@
     {{-- Área de mensagens --}}
     <div id="chat-messages">
         @foreach ($messages as $msg)
-            <div class="bubble-row {{ $msg['role'] }}">
-                <div class="bubble {{ $msg['role'] }}">
-                    @if ($msg['role'] === 'model')
-                        <div class="md">{!! $msg['html'] !!}</div>
-                    @else
-                        {{ $msg['text'] }}
-                    @endif
-                    <div class="bubble-time">{{ $msg['hora'] }}</div>
-                </div>
-            </div>
-        @endforeach
-
-        @if ($processando)
-            <div class="bubble-row model">
-                <div class="bubble model">
-                    <div class="typing-dots">
-                        <div class="typing-dot"></div>
-                        <div class="typing-dot"></div>
-                        <div class="typing-dot"></div>
+            @if (! ($msg['hidden'] ?? false))
+                <div class="bubble-row {{ $msg['role'] }}">
+                    <div class="bubble {{ $msg['role'] }}">
+                        @if ($msg['role'] === 'model')
+                            <div class="md">{!! $msg['html'] !!}</div>
+                        @else
+                            {{ $msg['text'] }}
+                        @endif
+                        <div class="bubble-time">{{ $msg['hora'] }}</div>
                     </div>
                 </div>
-            </div>
-        @endif
+            @endif
+        @endforeach
     </div>
 
     {{-- Alerta de erro da API --}}
@@ -117,6 +107,19 @@
                     title="Fechar">×</button>
         </div>
     @endif
+
+    {{-- Indicador "Assistente está digitando" — aparece durante o envio (lado do cliente) --}}
+    <div id="typing-indicator" wire:loading.flex wire:target="enviar">
+        <div class="ti-avatar">⚖️</div>
+        <div class="ti-bubble">
+            <div class="typing-dots">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+            </div>
+            <span class="ti-label">Assistente está digitando…</span>
+        </div>
+    </div>
 
     {{-- Barra de input --}}
     <div id="chat-input-bar">

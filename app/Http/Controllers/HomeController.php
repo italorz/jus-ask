@@ -22,7 +22,7 @@ class HomeController extends Controller
         if ($tenant->check()) {
             $dados['totalClientes'] = Cliente::count();
             $dados['totalProcessos'] = Processo::count();
-            $dados['processosAbertos'] = Processo::where('encerrado', false)->count();
+            $dados['processosAbertos'] = Processo::where('ativo', true)->count();
         }
 
         if (auth()->user()->isSuperAdmin()) {

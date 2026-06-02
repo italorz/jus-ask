@@ -35,7 +35,7 @@ class GerenciarClientes extends Component
     public ?int   $processoId               = null;
     public string $processoNumero           = '';
     public string $processoUltimaAtualizacao = '';
-    public bool   $processoEncerrado        = false;
+    public bool   $processoAtivo            = true;
 
     // Chave Gemini
     public ?int $chaveGeminiId = null;
@@ -87,7 +87,7 @@ class GerenciarClientes extends Component
         return [
             'processoNumero'            => ['required', 'string', 'max:100'],
             'processoUltimaAtualizacao' => ['nullable', 'date'],
-            'processoEncerrado'         => ['boolean'],
+            'processoAtivo'             => ['boolean'],
         ];
     }
 
@@ -196,7 +196,7 @@ class GerenciarClientes extends Component
         $this->processoId                 = $processo->id;
         $this->processoNumero             = $processo->numero;
         $this->processoUltimaAtualizacao  = $processo->ultima_atualizacao?->format('Y-m-d') ?? '';
-        $this->processoEncerrado          = $processo->encerrado;
+        $this->processoAtivo              = $processo->ativo;
         $this->modoVincular               = false;
         $this->mostrarFormProcesso        = true;
     }
@@ -216,7 +216,7 @@ class GerenciarClientes extends Component
             'cliente_id'         => $this->clienteId,
             'numero'             => $this->processoNumero,
             'ultima_atualizacao' => $this->processoUltimaAtualizacao ?: null,
-            'encerrado'          => $this->processoEncerrado,
+            'ativo'              => $this->processoAtivo,
         ];
 
         if ($this->processoId) {
@@ -307,9 +307,9 @@ class GerenciarClientes extends Component
     {
         $this->reset([
             'processoId', 'processoNumero',
-            'processoUltimaAtualizacao', 'processoEncerrado',
-            'modoVincular',
+            'processoUltimaAtualizacao', 'modoVincular',
         ]);
+        $this->processoAtivo       = true;
         $this->mostrarFormProcesso = false;
         $this->resetValidation();
     }

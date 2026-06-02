@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Models\ChaveGemini;
 use App\Models\Empresa;
 use App\Models\Membro;
 use App\Models\User;
@@ -48,7 +47,6 @@ class RegisterController extends Controller implements HasMiddleware
                 'max:20',
                 Rule::unique('empresas', 'cnpj'),
             ],
-            'gemini_chave' => ['nullable', 'string', 'max:500'],
         ]);
 
         // Sem empresa, a OAB vira o tenant: nao pode colidir com outro tenant.
@@ -105,17 +103,6 @@ class RegisterController extends Controller implements HasMiddleware
                 'ativo' => true,
             ]);
 
-            // Chave Gemini opcional: criada com empresa_id/tenant explícitos
-            // porque o TenantManager ainda não foi inicializado na sessão.
-            if (! empty($data['gemini_chave'])) {
-                ChaveGemini::create([
-                    'empresa_id' => $empresa->id,
-                    'tenant'     => $empresa->tenant,
-                    'apelido'    => 'Principal',
-                    'chave'      => $data['gemini_chave'],
-                ]);
-            }
-
             return $user;
         });
     }
@@ -130,6 +117,8 @@ class RegisterController extends Controller implements HasMiddleware
         if ($membro) {
             $request->session()->put('empresa_ativa_id', $membro->empresa_id);
         }
+
+        $request->session()->put('login_at', now()->toIso8601String());
     }
 
     protected function possuiEmpresa(array $data): bool

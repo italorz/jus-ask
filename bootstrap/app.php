@@ -16,7 +16,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // Resolve o tenant em todo request web (inclusive nas chamadas
         // /livewire/update), antes do route-model binding, garantindo que
         // o global scope multi-tenant esteja sempre ativo.
-        $middleware->web(append: [ResolveTenant::class]);
+        $middleware->web(append: [
+            ResolveTenant::class,
+            \App\Http\Middleware\CheckSessionExpiry::class,
+        ]);
         $middleware->prependToPriorityList(SubstituteBindings::class, ResolveTenant::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

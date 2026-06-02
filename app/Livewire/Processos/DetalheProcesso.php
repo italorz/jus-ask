@@ -3,7 +3,9 @@
 namespace App\Livewire\Processos;
 
 use App\Models\ConteudoProcesso;
+use App\Models\Notificacao;
 use App\Models\Processo;
+use App\Models\ProcessoContato;
 use App\Models\ProcessoConteudo;
 use App\Services\TenantManager;
 use Livewire\Component;
@@ -12,9 +14,14 @@ class DetalheProcesso extends Component
 {
     public Processo $processo;
 
-    public ?int $conteudoId = null;
+    // Anotações manuais
+    public ?int   $conteudoId     = null;
     public string $numeroProcesso = '';
-    public string $conteudo = '';
+    public string $conteudo       = '';
+
+    // Contatos de notificação
+    public string $contatoTipo   = 'email';
+    public string $contatoValor  = '';
 
     public function mount(Processo $processo)
     {
@@ -22,7 +29,7 @@ class DetalheProcesso extends Component
             return redirect()->route('home');
         }
 
-        $this->processo = $processo;
+        $this->processo       = $processo;
         $this->numeroProcesso = $processo->numero;
     }
 
@@ -30,17 +37,19 @@ class DetalheProcesso extends Component
     {
         return [
             'numeroProcesso' => ['required', 'string', 'max:100'],
-            'conteudo' => ['required', 'string'],
+            'conteudo'       => ['required', 'string'],
         ];
     }
+
+    // ─── Anotações ──────────────────────────────────────────────────────────
 
     public function editar(int $id): void
     {
         $registro = ConteudoProcesso::where('processo_id', $this->processo->id)->findOrFail($id);
 
-        $this->conteudoId = $registro->id;
+        $this->conteudoId     = $registro->id;
         $this->numeroProcesso = $registro->numero_processo;
-        $this->conteudo = $registro->conteudo;
+        $this->conteudo       = $registro->conteudo;
     }
 
     public function salvar(): void
@@ -48,9 +57,9 @@ class DetalheProcesso extends Component
         $this->validate();
 
         $dados = [
-            'processo_id' => $this->processo->id,
+            'processo_id'    => $this->processo->id,
             'numero_processo' => $this->numeroProcesso,
-            'conteudo' => $this->conteudo,
+            'conteudo'       => $this->conteudo,
         ];
 
         if ($this->conteudoId) {
@@ -81,6 +90,45 @@ class DetalheProcesso extends Component
         $this->resetValidation();
     }
 
+    // ─── Contatos de notificação ──────────────────────────────────────────
+
+    public function adicionarContato(): void
+    {
+        $this->validate([
+            'contatoTipo'  => ['required', 'in:email,telefone'],
+            'contatoValor' => ['required', 'string', 'max:255'],
+        ], [], [
+            'contatoTipo'  => 'tipo',
+            'contatoValor' => 'valor',
+        ]);
+
+        ProcessoContato::create([
+            'processo_id' => $this->processo->id,
+            'tipo'        => $this->contatoTipo,
+            'valor'       => trim($this->contatoValor),
+        ]);
+
+        $this->contatoValor = '';
+        session()->flash('status', 'Contato adicionado.');
+    }
+
+    public function removerContato(int $id): void
+    {
+        ProcessoContato::where('processo_id', $this->processo->id)->findOrFail($id)->delete();
+        session()->flash('status', 'Contato removido.');
+    }
+
+    // ─── Notificações ─────────────────────────────────────────────────────
+
+    public function marcarNotificacaoLida(int $id): void
+    {
+        Notificacao::where('processo_id', $this->processo->id)
+            ->findOrFail($id)
+            ->update(['lida' => true]);
+    }
+
+    // ─── Render ───────────────────────────────────────────────────────────
+
     public function render()
     {
         $apiSnapshots = ProcessoConteudo::where('processo_id', $this->processo->id)
@@ -88,26 +136,26 @@ class DetalheProcesso extends Component
             ->get()
             ->map(function ($snap) {
                 $raw = $snap->conteudo_json;
-                // Registros antigos foram gravados como string (body); decodifica novamente se necessário.
                 if (is_string($raw)) {
                     $raw = json_decode($raw, true);
                 }
                 $content = $raw['content'][0] ?? null;
                 $tram    = $content['tramitacoes'][0] ?? null;
+
                 return [
-                    'id'                          => $snap->id,
-                    'sincronizado_em'             => $snap->created_at,
-                    'numero_processo'             => $content['numeroProcesso'] ?? null,
-                    'tribunal_sigla'              => $tram['tribunal']['sigla'] ?? null,
-                    'tribunal_nome'               => $tram['tribunal']['nome'] ?? null,
-                    'segmento'                    => $tram['tribunal']['segmento'] ?? null,
-                    'data_ajuizamento'            => $tram['dataHoraAjuizamento'] ?? null,
-                    'data_ultima_distribuicao'    => $tram['dataHoraUltimaDistribuicao'] ?? null,
-                    'valor_acao'                  => $tram['valorAcao'] ?? null,
-                    'classe'                      => $tram['classe'][0]['descricao'] ?? null,
-                    'assunto'                     => $tram['assunto'][0]['descricao'] ?? null,
-                    'assunto_hierarquia'          => $tram['assunto'][0]['hierarquia'] ?? null,
-                    'movimentos'                  => $tram['movimentos'] ?? [],
+                    'id'                       => $snap->id,
+                    'sincronizado_em'           => $snap->created_at,
+                    'numero_processo'           => $content['numeroProcesso'] ?? null,
+                    'tribunal_sigla'            => $tram['tribunal']['sigla'] ?? null,
+                    'tribunal_nome'             => $tram['tribunal']['nome'] ?? null,
+                    'segmento'                  => $tram['tribunal']['segmento'] ?? null,
+                    'data_ajuizamento'          => $tram['dataHoraAjuizamento'] ?? null,
+                    'data_ultima_distribuicao'  => $tram['dataHoraUltimaDistribuicao'] ?? null,
+                    'valor_acao'                => $tram['valorAcao'] ?? null,
+                    'classe'                    => $tram['classe'][0]['descricao'] ?? null,
+                    'assunto'                   => $tram['assunto'][0]['descricao'] ?? null,
+                    'assunto_hierarquia'        => $tram['assunto'][0]['hierarquia'] ?? null,
+                    'movimentos'                => $tram['movimentos'] ?? [],
                 ];
             });
 
@@ -116,6 +164,14 @@ class DetalheProcesso extends Component
                 ->orderByDesc('created_at')
                 ->get(),
             'apiSnapshots' => $apiSnapshots,
+            'contatos'     => ProcessoContato::where('processo_id', $this->processo->id)
+                ->orderBy('tipo')
+                ->orderBy('valor')
+                ->get(),
+            'notificacoes' => Notificacao::where('processo_id', $this->processo->id)
+                ->orderByDesc('created_at')
+                ->limit(20)
+                ->get(),
         ])->extends('layouts.app');
     }
 }

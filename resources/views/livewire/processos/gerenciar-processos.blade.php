@@ -41,8 +41,8 @@
                         </div>
                         <div class="col-md-6 d-flex align-items-end">
                             <div class="form-check">
-                                <input type="checkbox" class="form-check-input" id="encerrado" wire:model="encerrado">
-                                <label class="form-check-label" for="encerrado">Processo encerrado</label>
+                                <input type="checkbox" class="form-check-input" id="ativo" wire:model="ativo">
+                                <label class="form-check-label" for="ativo">Processo ativo</label>
                             </div>
                         </div>
                     </div>
@@ -74,10 +74,10 @@
                             <td>{{ $processo->cliente?->nome ?? '—' }}</td>
                             <td>{{ $processo->ultima_atualizacao?->format('d/m/Y') ?? '—' }}</td>
                             <td>
-                                @if ($processo->encerrado)
-                                    <span class="badge bg-secondary">Encerrado</span>
+                                @if ($processo->ativo)
+                                    <span class="badge bg-success">Ativo</span>
                                 @else
-                                    <span class="badge bg-success">Em aberto</span>
+                                    <span class="badge bg-secondary">Encerrado</span>
                                 @endif
                             </td>
                             <td class="text-end">

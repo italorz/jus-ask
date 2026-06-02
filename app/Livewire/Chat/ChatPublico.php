@@ -16,11 +16,12 @@ class ChatPublico extends Component
     public string $empresaNome = '';
 
     // Fase de identificação
-    public bool   $identificado  = false;
-    public string $telefoneInput = '';
-    public string $erroTelefone  = '';
-    public int    $clienteId     = 0;
-    public string $clienteNome   = '';
+    public bool   $identificado    = false;
+    public string $identificadoEm  = '';   // ISO 8601 — timestamp da identificação
+    public string $telefoneInput   = '';
+    public string $erroTelefone    = '';
+    public int    $clienteId       = 0;
+    public string $clienteNome     = '';
 
     // Fase de chat
     public string $mensagemInput = '';
@@ -54,28 +55,74 @@ class ChatPublico extends Component
             return;
         }
 
-        $this->clienteId   = $cliente->id;
-        $this->clienteNome = $cliente->nome;
+        $this->clienteId      = $cliente->id;
+        $this->clienteNome    = $cliente->nome;
+        $this->identificadoEm = now()->toIso8601String();
 
         $this->systemPrompt = app(GeminiService::class)
             ->buildSystemPrompt($this->empresaId, $this->clienteId);
 
-        $this->identificado = true;
+        $this->processando = true;
 
-        $welcome = "Olá, {$cliente->nome}! Sou o assistente jurídico virtual. Posso responder perguntas sobre os seus processos cadastrados. Como posso ajudá-lo?";
-
+        // Mensagem de trigger oculta ao usuário, mantém o histórico da conversa coerente
+        $triggerMsg = 'Olá! Por favor, apresente-se brevemente e forneça um resumo completo e claro de todos os meus processos jurídicos.';
         $this->messages[] = [
-            'role' => 'model',
-            'text' => $welcome,
-            'html' => $this->toHtml($welcome),
-            'hora' => now()->format('H:i'),
+            'role'   => 'user',
+            'text'   => $triggerMsg,
+            'html'   => null,
+            'hora'   => now()->format('H:i'),
+            'hidden' => true,
         ];
 
+        try {
+            $resumo = app(GeminiService::class)->chat(
+                empresaId:    $this->empresaId,
+                clienteId:    $this->clienteId,
+                systemPrompt: $this->systemPrompt,
+                history:      [],
+                userMessage:  $triggerMsg,
+            );
+            $this->messages[] = [
+                'role' => 'model',
+                'text' => $resumo,
+                'html' => $this->toHtml($resumo),
+                'hora' => now()->format('H:i'),
+            ];
+        } catch (\Throwable) {
+            $welcome = "Olá, {$cliente->nome}! Sou o assistente jurídico virtual. Posso responder perguntas sobre os seus processos cadastrados. Como posso ajudá-lo?";
+            $this->messages[] = [
+                'role' => 'model',
+                'text' => $welcome,
+                'html' => $this->toHtml($welcome),
+                'hora' => now()->format('H:i'),
+            ];
+        } finally {
+            $this->processando = false;
+        }
+
+        $this->identificado = true;
         $this->dispatch('scroll-to-bottom');
+    }
+
+    public function verificarSessao(): void
+    {
+        if (! $this->identificado || ! $this->identificadoEm) {
+            return;
+        }
+
+        if (now()->diffInHours($this->identificadoEm) >= 7) {
+            $this->reset([
+                'identificado', 'identificadoEm', 'clienteId', 'clienteNome',
+                'messages', 'systemPrompt', 'mensagemInput', 'erroApi', 'processando',
+            ]);
+            $this->erroTelefone = 'Sua sessão expirou após 7 horas. Por favor, identifique-se novamente.';
+        }
     }
 
     public function enviar(): void
     {
+        $this->verificarSessao();
+
         $texto = trim($this->mensagemInput);
 
         if (! $texto || $this->processando || ! $this->identificado) {
@@ -86,10 +133,9 @@ class ChatPublico extends Component
         $this->erroApi       = '';
         $this->processando   = true;
 
-        // Captura o histórico ANTES de adicionar a mensagem atual.
-        // Pula a mensagem de boas-vindas (index 0), que foi gerada localmente.
+        // Captura o histórico completo ANTES de adicionar a mensagem atual.
+        // O trigger inicial (oculto, index 0) é incluído para manter a coerência da conversa.
         $history = collect($this->messages)
-            ->slice(1)
             ->map(fn ($m) => ['role' => $m['role'], 'text' => $m['text']])
             ->values()
             ->toArray();
@@ -181,6 +227,8 @@ class ChatPublico extends Component
 
     public function render()
     {
+        $this->verificarSessao();
+
         return view('livewire.chat.chat-publico')
             ->extends('layouts.chat');
     }

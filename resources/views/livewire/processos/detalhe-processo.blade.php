@@ -6,10 +6,10 @@
     <h1 class="h3">Processo {{ $processo->numero }}</h1>
     <p class="text-muted">
         Cliente: <strong>{{ $processo->cliente?->nome }}</strong>
-        @if ($processo->encerrado)
-            <span class="badge bg-secondary">Encerrado</span>
+        @if ($processo->ativo)
+            <span class="badge bg-success">Ativo</span>
         @else
-            <span class="badge bg-success">Em aberto</span>
+            <span class="badge bg-secondary">Encerrado</span>
         @endif
     </p>
 
@@ -133,4 +133,85 @@
     @empty
         <p class="text-muted">Nenhum conteúdo registrado para este processo.</p>
     @endforelse
+
+    {{-- ── Contatos de Notificação ─────────────────────────────────── --}}
+    <hr class="my-4">
+    <h2 class="h5 mb-3">Contatos para notificação</h2>
+    <p class="text-muted" style="font-size:.875rem;">
+        Cadastre e-mails e telefones que serão notificados automaticamente quando este processo for atualizado na API PDPJ.
+    </p>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <form wire:submit="adicionarContato" class="row g-2 align-items-end">
+                <div class="col-auto">
+                    <label class="form-label">Tipo</label>
+                    <select class="form-select form-select-sm" wire:model="contatoTipo" style="min-width:110px;">
+                        <option value="email">E-mail</option>
+                        <option value="telefone">Telefone</option>
+                    </select>
+                </div>
+                <div class="col">
+                    <label class="form-label">Valor</label>
+                    <input type="text" class="form-control form-control-sm @error('contatoValor') is-invalid @enderror"
+                           wire:model="contatoValor"
+                           placeholder="{{ $contatoTipo === 'email' ? 'contato@email.com' : '(00) 00000-0000' }}">
+                    @error('contatoValor') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-sm btn-primary">Adicionar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if ($contatos->isNotEmpty())
+        <div class="card mb-4">
+            <ul class="list-group list-group-flush">
+                @foreach ($contatos as $contato)
+                    <li class="list-group-item d-flex align-items-center justify-content-between py-2" wire:key="contato-{{ $contato->id }}">
+                        <span>
+                            <span class="badge {{ $contato->tipo === 'email' ? 'bg-primary' : 'bg-success' }} me-2">
+                                {{ $contato->tipo === 'email' ? 'E-mail' : 'Tel' }}
+                            </span>
+                            {{ $contato->valor }}
+                        </span>
+                        <button class="btn btn-sm btn-outline-danger"
+                                wire:click="removerContato({{ $contato->id }})"
+                                wire:confirm="Remover este contato?">✕</button>
+                    </li>
+                @endforeach
+            </ul>
+        </div>
+    @else
+        <p class="text-muted mb-4">Nenhum contato cadastrado.</p>
+    @endif
+
+    {{-- ── Notificações deste processo ─────────────────────────────── --}}
+    @if ($notificacoes->isNotEmpty())
+        <hr class="my-4">
+        <h2 class="h5 mb-3">Histórico de atualizações detectadas</h2>
+        <div class="card">
+            <ul class="list-group list-group-flush">
+                @foreach ($notificacoes as $notif)
+                    <li class="list-group-item {{ $notif->lida ? '' : 'list-group-item-warning' }} py-2"
+                        wire:key="notif-{{ $notif->id }}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <strong>{{ $notif->titulo }}</strong>
+                                <p class="mb-0 text-muted" style="font-size:.83rem;">{{ $notif->mensagem }}</p>
+                                <small class="text-muted">{{ $notif->created_at->format('d/m/Y H:i') }}</small>
+                            </div>
+                            @unless ($notif->lida)
+                                <button class="btn btn-sm btn-outline-secondary ms-3 flex-shrink-0"
+                                        wire:click="marcarNotificacaoLida({{ $notif->id }})">
+                                    Marcar como lida
+                                </button>
+                            @endunless
+                        </div>
+                    </li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
 </div>

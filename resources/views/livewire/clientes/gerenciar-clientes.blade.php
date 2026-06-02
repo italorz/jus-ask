@@ -242,8 +242,8 @@
                                                 </div>
                                                 <div class="col-12">
                                                     <div class="form-check">
-                                                        <input type="checkbox" class="form-check-input" id="processoEncerrado" wire:model="processoEncerrado">
-                                                        <label class="form-check-label" for="processoEncerrado">Processo encerrado</label>
+                                                        <input type="checkbox" class="form-check-input" id="processoAtivo" wire:model="processoAtivo">
+                                                        <label class="form-check-label" for="processoAtivo">Processo ativo</label>
                                                     </div>
                                                 </div>
                                             </div>
@@ -315,10 +315,10 @@
                                                 <td class="font-monospace small">{{ $processo->numero }}</td>
                                                 <td>{{ $processo->ultima_atualizacao?->format('d/m/Y') ?? '—' }}</td>
                                                 <td>
-                                                    @if ($processo->encerrado)
-                                                        <span class="badge bg-secondary">Encerrado</span>
+                                                    @if ($processo->ativo)
+                                                        <span class="badge bg-success">Ativo</span>
                                                     @else
-                                                        <span class="badge bg-success">Em aberto</span>
+                                                        <span class="badge bg-secondary">Encerrado</span>
                                                     @endif
                                                 </td>
                                                 <td class="text-end">

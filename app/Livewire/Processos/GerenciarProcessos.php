@@ -10,13 +10,13 @@ use Livewire\Component;
 
 class GerenciarProcessos extends Component
 {
-    public ?int $processoId = null;
-    public bool $mostrarForm = false;
+    public ?int   $processoId        = null;
+    public bool   $mostrarForm       = false;
 
-    public ?int $clienteId = null;
-    public string $numero = '';
+    public ?int   $clienteId         = null;
+    public string $numero            = '';
     public string $ultimaAtualizacao = '';
-    public bool $encerrado = false;
+    public bool   $ativo             = true;
 
     public function mount()
     {
@@ -28,10 +28,10 @@ class GerenciarProcessos extends Component
     protected function rules(): array
     {
         return [
-            'clienteId' => ['nullable', 'integer'],
-            'numero' => ['required', 'string', 'max:100'],
+            'clienteId'         => ['nullable', 'integer'],
+            'numero'            => ['required', 'string', 'max:100'],
             'ultimaAtualizacao' => ['nullable', 'date'],
-            'encerrado' => ['boolean'],
+            'ativo'             => ['boolean'],
         ];
     }
 
@@ -45,11 +45,11 @@ class GerenciarProcessos extends Component
     {
         $processo = Processo::findOrFail($id);
 
-        $this->processoId = $processo->id;
-        $this->clienteId = $processo->cliente_id;
-        $this->numero = $processo->numero;
+        $this->processoId        = $processo->id;
+        $this->clienteId         = $processo->cliente_id;
+        $this->numero            = $processo->numero;
         $this->ultimaAtualizacao = $processo->ultima_atualizacao?->format('Y-m-d') ?? '';
-        $this->encerrado = $processo->encerrado;
+        $this->ativo             = $processo->ativo;
 
         $this->mostrarForm = true;
     }
@@ -58,24 +58,23 @@ class GerenciarProcessos extends Component
     {
         $this->validate();
 
-        // Garante que o cliente pertence ao tenant ativo (escopo global) — quando informado.
         if ($this->clienteId) {
             Cliente::findOrFail($this->clienteId);
         }
 
         $dados = [
-            'cliente_id' => $this->clienteId,
-            'numero' => $this->numero,
+            'cliente_id'         => $this->clienteId,
+            'numero'             => $this->numero,
             'ultima_atualizacao' => $this->ultimaAtualizacao ?: null,
-            'encerrado' => $this->encerrado,
+            'ativo'              => $this->ativo,
         ];
 
         if ($this->processoId) {
             Processo::findOrFail($this->processoId)->update($dados);
             session()->flash('status', 'Processo atualizado.');
         } else {
-            $processo = Processo::create($dados);
-            $sincronizado = app(ProcessoApiService::class)->consultarESalvar($processo);
+            $processo     = Processo::create($dados);
+            $sincronizado = ProcessoApiService::consultarESalvar($processo);
             if ($sincronizado) {
                 session()->flash('status', 'Processo cadastrado e sincronizado com a API.');
             } else {
@@ -90,7 +89,8 @@ class GerenciarProcessos extends Component
     public function sincronizar(int $id): void
     {
         $processo = Processo::findOrFail($id);
-        $ok = app(ProcessoApiService::class)->consultarESalvar($processo);
+        $ok       = ProcessoApiService::consultarESalvar($processo);
+
         if ($ok) {
             session()->flash('status', 'Processo sincronizado com sucesso.');
         } else {
@@ -112,7 +112,8 @@ class GerenciarProcessos extends Component
 
     protected function resetForm(): void
     {
-        $this->reset(['processoId', 'clienteId', 'numero', 'ultimaAtualizacao', 'encerrado']);
+        $this->reset(['processoId', 'clienteId', 'numero', 'ultimaAtualizacao']);
+        $this->ativo = true;
         $this->resetValidation();
     }
 
@@ -120,7 +121,7 @@ class GerenciarProcessos extends Component
     {
         return view('livewire.processos.gerenciar-processos', [
             'processos' => Processo::with('cliente')->orderByDesc('ultima_atualizacao')->get(),
-            'clientes' => Cliente::orderBy('nome')->get(),
+            'clientes'  => Cliente::orderBy('nome')->get(),
         ])->extends('layouts.app');
     }
 }

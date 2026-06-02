@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\ChaveGemini;
 use App\Models\Cliente;
-use App\Models\ConteudoProcesso;
 use App\Models\Processo;
 use App\Models\ProcessoConteudo;
 use Carbon\Carbon;
@@ -62,6 +61,8 @@ REGRAS ESTRITAS QUE VOCÊ DEVE SEGUIR:
 5. Seja conciso, claro e profissional.
 6. Você está conversando com o próprio cliente {$cliente->nome}.
 7. Nunca revele dados de outros clientes ou processos de outras pessoas.
+8. Se houver informações indisponíveis, incompletas ou ocultas sobre qualquer processo, informe ao usuário com clareza o que não está disponível — nunca omita essas limitações.
+9. Sempre que mencionar termos técnicos jurídicos (como 'liminar', 'tutela antecipada', 'habeas corpus', 'trânsito em julgado', 'agravo', 'apelação', 'mandado de segurança', 'citação', 'intimação', entre outros), explique-os de forma simples e acessível para um cliente leigo, usando parênteses ou um parágrafo explicativo na mesma resposta.
 PROMPT;
     }
 
@@ -194,58 +195,118 @@ PROMPT;
     private function buildProcessoText(Processo $p, int $empresaId): string
     {
         $text  = "PROCESSO: {$p->numero}\n";
-        $text .= 'Situação: ' . ($p->encerrado ? 'Encerrado' : 'Em andamento') . "\n";
+        $text .= 'Situação: ' . ($p->ativo ? 'Em andamento' : 'Encerrado') . "\n";
 
-        if ($p->assunto)               $text .= "Assunto: {$p->assunto}\n";
-        if ($p->valor_acao)            $text .= 'Valor da ação: R$ ' . number_format((float) $p->valor_acao, 2, ',', '.') . "\n";
-        if ($p->data_hora_ajuizamento) $text .= 'Data de ajuizamento: ' . $p->data_hora_ajuizamento->format('d/m/Y') . "\n";
-        if ($p->ultima_atualizacao)    $text .= 'Última atualização: ' . $p->ultima_atualizacao->format('d/m/Y') . "\n";
-
-        // Anotações manuais (ConteudoProcesso)
-        $anotacoes = ConteudoProcesso::withoutGlobalScopes()
-            ->where('empresa_id', $empresaId)
-            ->where('processo_id', $p->id)
-            ->get();
-
-        if ($anotacoes->isNotEmpty()) {
-            $text .= "\nANOTAÇÕES DO ESCRITÓRIO:\n";
-            foreach ($anotacoes as $a) {
-                $text .= "- {$a->conteudo}\n";
-            }
-        }
-
-        // Snapshot mais recente da API (ProcessoConteudo)
         $snapshot = ProcessoConteudo::withoutGlobalScopes()
             ->where('empresa_id', $empresaId)
             ->where('processo_id', $p->id)
             ->latest()
             ->first();
 
-        if ($snapshot) {
-            $raw = $snapshot->conteudo_json;
-            if (is_string($raw)) {
-                $raw = json_decode($raw, true);
-            }
-            $content = $raw['content'][0] ?? null;
-            $tram    = $content['tramitacoes'][0] ?? null;
+        if (! $snapshot || empty($snapshot->conteudo_json)) {
+            $text .= "Detalhes: informações detalhadas não disponíveis (sincronização pendente).\n";
+            return $text;
+        }
 
-            if ($tram) {
-                if (! empty($tram['tribunal']['nome'])) {
-                    $text .= "Tribunal: {$tram['tribunal']['nome']}\n";
-                }
-                if (! empty($tram['classe'][0]['descricao'])) {
-                    $text .= "Classe: {$tram['classe'][0]['descricao']}\n";
-                }
-                if (! empty($tram['movimentos'])) {
-                    $text .= "\nÚLTIMOS MOVIMENTOS (até 5):\n";
-                    foreach (array_slice($tram['movimentos'], 0, 5) as $mov) {
-                        $data      = isset($mov['dataHora'])
-                            ? Carbon::parse($mov['dataHora'])->format('d/m/Y')
-                            : '?';
-                        $descricao = $mov['descricao'] ?? ($mov['nome'] ?? 'sem descrição');
-                        $text     .= "- [{$data}] {$descricao}\n";
+        $raw  = is_string($snapshot->conteudo_json)
+            ? json_decode($snapshot->conteudo_json, true)
+            : (array) $snapshot->conteudo_json;
+
+        $content = $raw['content'][0] ?? null;
+        $tram    = $content['tramitacoes'][0] ?? null;
+
+        if (! $tram) {
+            $text .= "Detalhes: dados de tramitação não disponíveis.\n";
+            return $text;
+        }
+
+        // Tribunal
+        if (! empty($tram['tribunal']['nome'])) {
+            $sigla = ! empty($tram['tribunal']['sigla']) ? " ({$tram['tribunal']['sigla']})" : '';
+            $text .= "Tribunal: {$tram['tribunal']['nome']}{$sigla}\n";
+        }
+        if (! empty($tram['tribunal']['segmento'])) {
+            $text .= 'Segmento: ' . str_replace('_', ' ', $tram['tribunal']['segmento']) . "\n";
+        }
+
+        // Classe processual
+        if (! empty($tram['classe'][0]['descricao'])) {
+            $text .= "Classe: {$tram['classe'][0]['descricao']}\n";
+        }
+
+        // Assunto(s) com hierarquia completa
+        if (! empty($tram['assunto'])) {
+            $text .= "Assunto(s):\n";
+            foreach ($tram['assunto'] as $a) {
+                $hierarquia = ! empty($a['hierarquia']) ? " | {$a['hierarquia']}" : '';
+                $text .= "  - {$a['descricao']}{$hierarquia}\n";
+            }
+        }
+
+        // Dados financeiros e temporais
+        if (! empty($tram['valorAcao'])) {
+            $text .= 'Valor da ação: R$ ' . number_format((float) $tram['valorAcao'], 2, ',', '.') . "\n";
+        }
+        if (! empty($tram['dataHoraAjuizamento'])) {
+            $text .= 'Data de ajuizamento: ' . Carbon::parse($tram['dataHoraAjuizamento'])->format('d/m/Y H:i') . "\n";
+        }
+        if (! empty($tram['dataHoraUltimaDistribuicao'])) {
+            $text .= 'Última distribuição: ' . Carbon::parse($tram['dataHoraUltimaDistribuicao'])->format('d/m/Y H:i') . "\n";
+        }
+
+        // Liminar e órgão julgador
+        if (isset($tram['liminar'])) {
+            $text .= 'Liminar: ' . ($tram['liminar'] ? 'Sim' : 'Não') . "\n";
+        }
+        if (! empty($tram['orgaoJulgador']['nome'])) {
+            $text .= "Órgão julgador: {$tram['orgaoJulgador']['nome']}\n";
+        }
+
+        // Último movimento (resumo rápido)
+        if (! empty($tram['ultimoMovimento']['dataHora'])) {
+            $dataUm = Carbon::parse($tram['ultimoMovimento']['dataHora'])->format('d/m/Y H:i');
+            $text  .= "Último movimento: [{$dataUm}] {$tram['ultimoMovimento']['descricao']}\n";
+        }
+
+        // Partes do processo
+        if (! empty($tram['partes'])) {
+            $text .= "\nPARTES DO PROCESSO:\n";
+            foreach ($tram['partes'] as $parte) {
+                $polo      = $parte['polo']      ?? '?';
+                $tipoParte = $parte['tipoParte'] ?? '?';
+                $nome      = $parte['nome']      ?? '?';
+                $text .= "  [{$polo} / {$tipoParte}] {$nome}\n";
+
+                foreach ($parte['representantes'] ?? [] as $rep) {
+                    $tipoRep = $rep['tipoRepresentacao'] ?? 'Representante';
+                    $nomeRep = $rep['nome'] ?? '?';
+                    $oab     = '';
+                    if (! empty($rep['oab'][0])) {
+                        $oab = " — OAB/{$rep['oab'][0]['uf']} {$rep['oab'][0]['numero']}";
                     }
+                    $text .= "    → {$tipoRep}: {$nomeRep}{$oab}\n";
                 }
+            }
+        }
+
+        // Todos os movimentos
+        if (! empty($tram['movimentos'])) {
+            $text .= "\nMOVIMENTOS DO PROCESSO:\n";
+            foreach ($tram['movimentos'] as $mov) {
+                $seq       = $mov['sequencia'] ?? '?';
+                $data      = ! empty($mov['dataHora'])
+                    ? Carbon::parse($mov['dataHora'])->format('d/m/Y H:i')
+                    : '?';
+                $descricao = $mov['descricao'] ?? ($mov['tipo']['nome'] ?? 'sem descrição');
+                $extra     = '';
+
+                if (! empty($mov['magistrado']['nome'])) {
+                    $extra .= " — Magistrado: {$mov['magistrado']['nome']}";
+                } elseif (! empty($mov['usuario']['nome'])) {
+                    $extra .= " — Usuário: {$mov['usuario']['nome']}";
+                }
+
+                $text .= "  [{$seq}] {$data} — {$descricao}{$extra}\n";
             }
         }
 
