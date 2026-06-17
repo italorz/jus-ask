@@ -9,6 +9,7 @@ use Livewire\Component;
 class GerenciarNotificacoes extends Component
 {
     public bool $apenasNaoLidas = false;
+    public ?int $notificacaoAbertaId = null;
 
     public function mount(): void
     {
@@ -28,6 +29,19 @@ class GerenciarNotificacoes extends Component
         session()->flash('status', 'Todas as notificações foram marcadas como lidas.');
     }
 
+    public function abrirModal(int $id): void
+    {
+        $notificacao = Notificacao::findOrFail($id);
+        $notificacao->update(['lida' => true]);
+
+        $this->notificacaoAbertaId = $id;
+    }
+
+    public function fecharModal(): void
+    {
+        $this->notificacaoAbertaId = null;
+    }
+
     public function render()
     {
         $query = Notificacao::with('processo')
@@ -40,6 +54,9 @@ class GerenciarNotificacoes extends Component
         return view('livewire.notificacoes.gerenciar-notificacoes', [
             'notificacoes' => $query->paginate(20),
             'totalNaoLidas' => Notificacao::where('lida', false)->count(),
+            'notificacaoAberta' => $this->notificacaoAbertaId
+                ? Notificacao::with('processo')->find($this->notificacaoAbertaId)
+                : null,
         ])->extends('layouts.app');
     }
 }

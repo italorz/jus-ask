@@ -5,12 +5,13 @@ namespace App\Services;
 use App\Models\Empresa;
 
 /**
- * Mantem a empresa (tenant) ativa do request atual.
- * Registrado como singleton no container.
+ * Guarda a empresa (tenant) ativa durante o request. Registrado como
+ * singleton no AppServiceProvider e consultado pelo trait BelongsToTenant
+ * para aplicar o isolamento multi-tenant.
  */
 class TenantManager
 {
-    protected ?Empresa $empresa = null;
+    private ?Empresa $empresa = null;
 
     public function set(Empresa $empresa): void
     {
@@ -20,6 +21,11 @@ class TenantManager
     public function forget(): void
     {
         $this->empresa = null;
+    }
+
+    public function check(): bool
+    {
+        return $this->empresa !== null;
     }
 
     public function empresa(): ?Empresa
@@ -35,10 +41,5 @@ class TenantManager
     public function tenant(): ?string
     {
         return $this->empresa?->tenant;
-    }
-
-    public function check(): bool
-    {
-        return $this->empresa !== null;
     }
 }

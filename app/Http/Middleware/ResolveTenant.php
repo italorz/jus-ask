@@ -2,68 +2,58 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Empresa;
 use App\Services\TenantManager;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Resolve a empresa (tenant) ativa do usuario logado a partir da sessao.
- * Um usuario pode ser membro de varias empresas; a sessao guarda qual
- * esta selecionada (chave "empresa_ativa_id").
+ * Resolve a empresa (tenant) ativa e a registra no TenantManager, que
+ * alimenta o global scope multi-tenant. O tenant pode vir do slug na URL
+ * (ex: /{tenant}/clientes) ou da sessao (requests sem slug, como /home).
  */
 class ResolveTenant
 {
+    public function __construct(private TenantManager $tenant)
+    {
+    }
+
     public function handle(Request $request, Closure $next): Response
     {
+        $slug = $request->route('tenant');
         $user = $request->user();
 
-        $tenantManager = app(TenantManager::class);
-
-        if ($user) {
-            $tenantSlug = $request->route('tenant');
-
-            if ($tenantSlug) {
-                // Tenant vem da URL: valida que o usuário é membro.
-                $membro = $user->membros()
-                    ->whereHas('empresa', fn ($q) => $q->where('tenant', $tenantSlug))
-                    ->where('ativo', true)
-                    ->first();
-
-                abort_unless($membro, 403, 'Você não tem acesso a este tenant.');
-
-                $tenantManager->set($membro->empresa);
-                $request->session()->put('empresa_ativa_id', $membro->empresa_id);
-            } else {
-                // Requests sem {tenant} (Livewire AJAX, /home, etc.) usam sessão.
-                $empresaId = $request->session()->get('empresa_ativa_id');
-                $membro    = null;
-
-                if ($empresaId) {
-                    $membro = $user->membros()
-                        ->where('empresa_id', $empresaId)
-                        ->where('ativo', true)
-                        ->first();
-                }
-
-                if (! $membro) {
-                    $membro = $user->membros()->where('ativo', true)->first();
-                }
-
-                if ($membro) {
-                    $tenantManager->set($membro->empresa);
-                    $request->session()->put('empresa_ativa_id', $membro->empresa_id);
-                }
+        // Rotas publicas (sem login): ativa o tenant apenas pelo slug da URL.
+        if (! $user) {
+            if ($slug && $empresa = Empresa::where('tenant', $slug)->first()) {
+                $this->tenant->set($empresa);
             }
+
+            return $next($request);
+        }
+
+        if ($slug) {
+            // Tenant na URL: o usuario precisa ser membro ativo dele.
+            $membro = $user->membros()
+                ->whereHas('empresa', fn ($q) => $q->where('tenant', $slug))
+                ->where('ativo', true)
+                ->first();
+
+            abort_unless($membro, 403, 'Você não tem acesso a este tenant.');
         } else {
-            // Rotas públicas com {tenant} na URL (ex: /{tenant}/chat).
-            $tenantSlug = $request->route('tenant');
-            if ($tenantSlug) {
-                $empresa = \App\Models\Empresa::where('tenant', $tenantSlug)->first();
-                if ($empresa) {
-                    $tenantManager->set($empresa);
-                }
-            }
+            // Sem slug: usa a empresa da sessao, com fallback no primeiro membro ativo.
+            $empresaId = $request->session()->get('empresa_ativa_id');
+
+            $membro = $user->membros()->where('ativo', true)
+                ->when($empresaId, fn ($q) => $q->where('empresa_id', $empresaId))
+                ->first()
+                ?? $user->membros()->where('ativo', true)->first();
+        }
+
+        if ($membro) {
+            $this->tenant->set($membro->empresa);
+            $request->session()->put('empresa_ativa_id', $membro->empresa_id);
         }
 
         return $next($request);

@@ -63,6 +63,10 @@
                                     <a class="nav-link {{ request()->routeIs('chaves-gemini') ? 'active-link' : '' }}"
                                        href="{{ route('chaves-gemini', ['tenant' => $tenant->tenant()]) }}">Chaves IA</a>
                                 </li>
+                                <li class="nav-item">
+                                    <a class="nav-link {{ request()->routeIs('mcp.*') ? 'active-link' : '' }}"
+                                       href="{{ route('mcp.index', ['tenant' => $tenant->tenant()]) }}">MCP</a>
+                                </li>
                             @endif
                             @can('super-admin')
                                 <li class="nav-item dropdown">

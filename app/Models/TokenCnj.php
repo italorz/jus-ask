@@ -8,5 +8,5 @@ class TokenCnj extends Model
 {
     protected $table = 'token_cnj';
 
-    protected $fillable = ['token'];
+    protected $fillable = ['token', 'tenant'];
 }

@@ -73,8 +73,11 @@ class GerenciarProcessos extends Component
             Processo::findOrFail($this->processoId)->update($dados);
             session()->flash('status', 'Processo atualizado.');
         } else {
-            $processo     = Processo::create($dados);
+            $processo = Processo::create($dados);
+
+            // Cadastro grava a linha de base sem notificar.
             $sincronizado = ProcessoApiService::consultarESalvar($processo);
+
             if ($sincronizado) {
                 session()->flash('status', 'Processo cadastrado e sincronizado com a API.');
             } else {
@@ -88,13 +91,13 @@ class GerenciarProcessos extends Component
 
     public function sincronizar(int $id): void
     {
-        $processo = Processo::findOrFail($id);
-        $ok       = ProcessoApiService::consultarESalvar($processo);
+        $processo  = Processo::findOrFail($id);
+        $resultado = ProcessoApiService::sincronizarComVerificacao($processo);
 
-        if ($ok) {
-            session()->flash('status', 'Processo sincronizado com sucesso.');
+        if ($resultado['atualizado']) {
+            session()->flash('status', 'Processo sincronizado com nova atualização.');
         } else {
-            session()->flash('warning', 'Não foi possível sincronizar o processo com a API.');
+            session()->flash('warning', 'Processo sincronizado sem novas atualizações.');
         }
     }
 

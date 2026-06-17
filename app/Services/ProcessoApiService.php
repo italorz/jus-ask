@@ -4,12 +4,10 @@ namespace App\Services;
 
 use App\Models\Notificacao;
 use App\Models\Processo;
-use App\Models\ProcessoContato;
 use App\Models\ProcessoConteudo;
 use App\Models\TokenCnj;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Mail;
 
 class ProcessoApiService
 {
@@ -21,103 +19,45 @@ class ProcessoApiService
     }
 
     /**
-     * Consulta a API e persiste dados — sem comparação (uso no cadastro individual).
-     * Sempre grava um novo snapshot em processos_conteudos.
+     * Resolve o token CNJ da empresa (tenant), com fallback no .env.
      */
-    static function consultarESalvar(Processo $processo): bool
+    static function resolverToken(?string $tenant = null): string
     {
-        try {
-            $json = self::consultarApi($processo);
+        $raw = TokenCnj::query()->where('tenant', $tenant)->latest()->value('token')
+            ?? env('TOKEN_API_PROCESSO', '');
 
-            if ($json === null) {
-                return false;
-            }
-
-            self::persistirSnapshot($processo, $json);
-
-            return true;
-        } catch (\Throwable $e) {
-            logger()->error('ProcessoApiService: exceção ao consultar API', [
-                'processo_id' => $processo->id,
-                'erro'        => $e->getMessage(),
-            ]);
-
-            return false;
-        }
+        return trim(str_replace('Bearer ', '', (string) $raw));
     }
 
     /**
-     * Consulta a API e compara com o último snapshot em processos_conteudos.
-     * Só grava e notifica quando a API retorna mais dados (em caracteres) do que o armazenado.
-     *
-     * @return array{atualizado: bool, tamanho_anterior: int, tamanho_novo: int, erro?: string}
+     * Consulta o PDPJ pelo número do processo. Retorna o JSON ou null.
      */
-    static function sincronizarComVerificacao(Processo $processo): array
+    static function consultarApi(?string $processo = null, ?string $tenant = null): ?array
     {
-        try {
-            $json = self::consultarApi($processo);
-
-            if ($json === null) {
-                return ['atualizado' => false, 'tamanho_anterior' => 0, 'tamanho_novo' => 0, 'erro' => 'Falha na API'];
-            }
-
-            $jsonString  = json_encode($json);
-            $tamanhoNovo = strlen($jsonString);
-
-            // Busca último snapshot sem escopo de tenant (sync roda fora de contexto HTTP)
-            $ultimo = ProcessoConteudo::withoutGlobalScopes()
-                ->where('processo_id', $processo->id)
-                ->latest()
-                ->first();
-
-            $tamanhoAtual = 0;
-            if ($ultimo && ! empty($ultimo->conteudo_json)) {
-                $stored       = is_string($ultimo->conteudo_json)
-                    ? $ultimo->conteudo_json
-                    : json_encode($ultimo->conteudo_json);
-                $tamanhoAtual = strlen($stored);
-            }
-
-            // Sem mudança: API não tem dados novos
-            if ($tamanhoNovo <= $tamanhoAtual && $ultimo !== null) {
-                return ['atualizado' => false, 'tamanho_anterior' => $tamanhoAtual, 'tamanho_novo' => $tamanhoNovo];
-            }
-
-            // Há dados novos: persiste e notifica
-            self::persistirSnapshot($processo, $json, explicit: true);
-            self::criarNotificacao($processo, $tamanhoAtual, $tamanhoNovo);
-
-            return ['atualizado' => true, 'tamanho_anterior' => $tamanhoAtual, 'tamanho_novo' => $tamanhoNovo];
-        } catch (\Throwable $e) {
-            logger()->error('ProcessoApiService: exceção na sincronização com verificação', [
-                'processo_id' => $processo->id,
-                'erro'        => $e->getMessage(),
-            ]);
-
-            return ['atualizado' => false, 'tamanho_anterior' => 0, 'tamanho_novo' => 0, 'erro' => $e->getMessage()];
+        if (empty($processo)) {
+            throw new \RuntimeException('Número do processo é obrigatório.');
         }
-    }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Helpers privados
-    // ─────────────────────────────────────────────────────────────────────
+        $token = self::resolverToken($tenant);
 
-    static function consultarApi(Processo $processo): ?array
-    {
-        $token       = self::resolverToken();
-        $numeroLimpo = self::limparNumero($processo->numero);
+        if ($token === '') {
+            throw new \RuntimeException('Nenhum token CNJ esta cadastrado para consultar o PDPJ.');
+        }
+
+        $numeroLimpo = self::limparNumero($processo);
 
         $response = Http::timeout(15)
             ->withToken($token)
             ->withHeaders(['User-Agent' => 'curl/8.19.0'])
             ->withoutVerifying()
-            ->get(self::API_URL, ['numeroProcesso' => $numeroLimpo]);
+            ->get(self::API_URL . $numeroLimpo);
 
         if (! $response->successful()) {
             logger()->warning('ProcessoApiService: resposta não-2xx', [
-                'processo_id' => $processo->id,
-                'status'      => $response->status(),
-                'body'        => $response->body(),
+                'numero' => $processo,
+                'tenant' => $tenant,
+                'status' => $response->status(),
+                'body'   => $response->body(),
             ]);
 
             return null;
@@ -129,7 +69,8 @@ class ProcessoApiService
 
         if (! $content || ! $tram) {
             logger()->warning('ProcessoApiService: estrutura inesperada no JSON', [
-                'processo_id' => $processo->id,
+                'numero' => $processo,
+                'tenant' => $tenant,
             ]);
 
             return null;
@@ -139,28 +80,106 @@ class ProcessoApiService
     }
 
     /**
-     * Espelha campos no processo e grava novo snapshot em processos_conteudos.
-     *
-     * @param bool $explicit Quando true, passa empresa_id/tenant explicitamente
-     *                       (necessário fora de contexto de tenant ativo).
+     * Consulta e grava um snapshot (uso no cadastro). Retorna true se sincronizou.
      */
-    static function persistirSnapshot(Processo $processo, array $json, bool $explicit = false): void
+    static function consultarESalvar(Processo $processo): bool
+    {
+        $json = self::consultarApi($processo->numero, $processo->tenant);
+
+        if ($json === null) {
+            return false;
+        }
+
+        self::persistirSnapshot($processo, $json);
+
+        return true;
+    }
+
+    /**
+     * Consulta e só grava/notifica quando a API traz mais dados que o último snapshot.
+     *
+     * @return array{atualizado: bool, tamanho_anterior: int, tamanho_novo: int}
+     */
+    static function sincronizarComVerificacao(Processo $processo): array
+    {
+        $json = self::consultarApi($processo->numero, $processo->tenant);
+
+        if ($json === null) {
+            return ['atualizado' => false, 'tamanho_anterior' => 0, 'tamanho_novo' => 0];
+        }
+
+        $tamanhoNovo = strlen(json_encode($json));
+
+        $ultimo = ProcessoConteudo::withoutGlobalScopes()
+            ->where('processo_id', $processo->id)
+            ->latest()
+            ->first();
+
+        // Primeira verificação: grava a linha de base sem notificar.
+        if ($ultimo === null) {
+            self::persistirSnapshot($processo, $json);
+
+            return ['atualizado' => false, 'tamanho_anterior' => 0, 'tamanho_novo' => $tamanhoNovo];
+        }
+
+        $tamanhoAtual = strlen(json_encode($ultimo->conteudo_json));
+
+        // Sem dados novos: nada a fazer.
+        if ($tamanhoNovo <= $tamanhoAtual) {
+            return ['atualizado' => false, 'tamanho_anterior' => $tamanhoAtual, 'tamanho_novo' => $tamanhoNovo];
+        }
+
+        self::persistirSnapshot($processo, $json);
+        self::criarNotificacao($processo, $tamanhoAtual, $tamanhoNovo);
+
+        return ['atualizado' => true, 'tamanho_anterior' => $tamanhoAtual, 'tamanho_novo' => $tamanhoNovo];
+    }
+
+    /**
+     * Verifica todos os processos ativos (de todas as empresas) e notifica os que
+     * tiverem novidade. Cada processo resolve o token pelo seu próprio tenant.
+     *
+     * @return int Quantidade de processos que geraram notificação.
+     */
+    static function verificarProcessosAtivos(): int
+    {
+        $processos = Processo::withoutGlobalScopes()
+            ->where('ativo', true)
+            ->get();
+
+        $atualizados = 0;
+
+        foreach ($processos as $processo) {
+            try {
+                if (self::sincronizarComVerificacao($processo)['atualizado']) {
+                    $atualizados++;
+                }
+            } catch (\Throwable $e) {
+                logger()->error('ProcessoApiService: falha ao verificar processo', [
+                    'processo_id' => $processo->id,
+                    'numero'      => $processo->numero,
+                    'tenant'      => $processo->tenant,
+                    'erro'        => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return $atualizados;
+    }
+
+    /**
+     * Espelha campos no processo e grava um novo snapshot em processos_conteudos.
+     */
+    static function persistirSnapshot(Processo $processo, array $json): void
     {
         $content = $json['content'][0];
         $tram    = $content['tramitacoes'][0];
 
-        $dataAjuizamento        = isset($tram['dataHoraAjuizamento'])
-            ? Carbon::parse($tram['dataHoraAjuizamento'])
-            : null;
-        $dataUltimaDistribuicao = isset($tram['dataHoraUltimaDistribuicao'])
-            ? Carbon::parse($tram['dataHoraUltimaDistribuicao'])
-            : null;
-        $dataUltimoMovimento    = isset($tram['ultimoMovimento']['dataHora'])
-            ? Carbon::parse($tram['ultimoMovimento']['dataHora'])
-            : null;
-        $valorAcao  = $tram['valorAcao'] ?? null;
-        $assunto    = $tram['assunto'][0]['descricao'] ?? null;
-        $numeroApi  = $content['numeroProcesso'] ?? null;
+        $dataAjuizamento        = isset($tram['dataHoraAjuizamento']) ? Carbon::parse($tram['dataHoraAjuizamento']) : null;
+        $dataUltimaDistribuicao = isset($tram['dataHoraUltimaDistribuicao']) ? Carbon::parse($tram['dataHoraUltimaDistribuicao']) : null;
+        $dataUltimoMovimento    = isset($tram['ultimoMovimento']['dataHora']) ? Carbon::parse($tram['ultimoMovimento']['dataHora']) : null;
+        $valorAcao              = $tram['valorAcao'] ?? null;
+        $assunto                = $tram['assunto'][0]['descricao'] ?? null;
 
         $processo->update([
             'data_hora_ajuizamento'         => $dataAjuizamento,
@@ -170,65 +189,28 @@ class ProcessoApiService
             'ultima_atualizacao'            => $dataUltimoMovimento,
         ]);
 
-        $dados = [
+        ProcessoConteudo::create([
             'processo_id'                   => $processo->id,
-            'numero_processo'               => $numeroApi,
+            'empresa_id'                    => $processo->empresa_id,
+            'tenant'                        => $processo->tenant,
+            'numero_processo'               => $content['numeroProcesso'] ?? null,
             'data_hora_ajuizamento'         => $dataAjuizamento,
             'valor_acao'                    => $valorAcao,
             'data_hora_ultima_distribuicao' => $dataUltimaDistribuicao,
             'assunto'                       => $assunto,
             'conteudo_json'                 => $json,
-        ];
-
-        if ($explicit) {
-            $dados['empresa_id'] = $processo->empresa_id;
-            $dados['tenant']     = $processo->tenant;
-        }
-
-        ProcessoConteudo::create($dados);
+        ]);
     }
 
     static function criarNotificacao(Processo $processo, int $tamanhoAnterior, int $tamanhoNovo): void
     {
-        $mensagem = "O processo {$processo->numero} foi atualizado na API PDPJ. "
-            . "Dados anteriores: {$tamanhoAnterior} caracteres. "
-            . "Dados atuais: {$tamanhoNovo} caracteres.";
-
         Notificacao::create([
             'processo_id' => $processo->id,
             'empresa_id'  => $processo->empresa_id,
             'tenant'      => $processo->tenant,
             'titulo'      => "Processo {$processo->numero} atualizado",
-            'mensagem'    => $mensagem,
+            'mensagem'    => "O processo {$processo->numero} teve atualização na API PDPJ "
+                . "({$tamanhoAnterior} → {$tamanhoNovo} caracteres).",
         ]);
-
-        // Envia e-mails para os contatos cadastrados
-        $emails = ProcessoContato::withoutGlobalScopes()
-            ->where('processo_id', $processo->id)
-            ->where('tipo', 'email')
-            ->pluck('valor');
-
-        foreach ($emails as $email) {
-            try {
-                Mail::raw($mensagem, function ($msg) use ($email, $processo) {
-                    $msg->to($email)
-                        ->subject("Atualização detectada — Processo {$processo->numero}");
-                });
-            } catch (\Throwable $e) {
-                logger()->warning('ProcessoApiService: falha ao enviar e-mail de notificação', [
-                    'email'       => $email,
-                    'processo_id' => $processo->id,
-                    'erro'        => $e->getMessage(),
-                ]);
-            }
-        }
-    }
-
-    static function resolverToken(): string
-    {
-        $raw = TokenCnj::latest()->value('token')
-            ?? env('TOKEN_API_PROCESSO', '');
-
-        return trim(preg_replace('/^bearer\s+/i', '', (string) $raw));
     }
 }

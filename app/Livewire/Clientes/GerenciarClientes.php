@@ -250,12 +250,12 @@ class GerenciarClientes extends Component
     public function sincronizarProcesso(int $id): void
     {
         $processo = Processo::findOrFail($id);
-        $ok       = app(ProcessoApiService::class)->consultarESalvar($processo);
+        $resultado = app(ProcessoApiService::class)->sincronizarComVerificacao($processo);
 
-        if ($ok) {
-            session()->flash('status', 'Processo sincronizado com sucesso.');
+        if ($resultado['atualizado']) {
+            session()->flash('status', 'Processo sincronizado com nova atualizacao.');
         } else {
-            session()->flash('warning', 'Não foi possível sincronizar o processo com a API.');
+            session()->flash('warning', 'Processo sincronizado sem novas atualizacoes.');
         }
     }
 

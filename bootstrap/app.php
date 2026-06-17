@@ -21,6 +21,18 @@ return Application::configure(basePath: dirname(__DIR__))
             \App\Http\Middleware\CheckSessionExpiry::class,
         ]);
         $middleware->prependToPriorityList(SubstituteBindings::class, ResolveTenant::class);
+
+        $middleware->alias([
+            'mcp.token' => \App\Http\Middleware\AuthenticateMcpToken::class,
+        ]);
+
+        // APIs externas (Evolution API e MCP) não enviam token CSRF.
+        $middleware->validateCsrfTokens(except: [
+            'mcp/processos',
+            'mcp/jus-ask',
+            'webhooks/whatsapp',
+            '*/webhooks/whatsapp',
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

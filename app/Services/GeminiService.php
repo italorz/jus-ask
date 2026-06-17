@@ -11,8 +11,8 @@ use Illuminate\Support\Facades\Http;
 
 class GeminiService
 {
-    private const MODEL = 'gemini-2.5-flash-lite';
-    private const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
+
+    private const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite';
 
     // ─────────────────────────────────────────────────────────────────────
     // System Prompt
@@ -22,7 +22,7 @@ class GeminiService
      * Monta o system prompt com os dados dos processos do cliente.
      * Usa withoutGlobalScopes() porque TenantManager pode não estar ativo.
      */
-    public function buildSystemPrompt(int $empresaId, int $clienteId): string
+    static function buildSystemPrompt(int $empresaId, int $clienteId): string
     {
         $cliente = Cliente::withoutGlobalScopes()
             ->where('empresa_id', $empresaId)
@@ -42,7 +42,7 @@ PROMPT;
         }
 
         $processosText = $processos
-            ->map(fn (Processo $p) => $this->buildProcessoText($p, $empresaId))
+            ->map(fn (Processo $p) => self::buildProcessoText($p, $empresaId))
             ->implode("\n\n---\n\n");
 
         return <<<PROMPT
@@ -83,14 +83,14 @@ PROMPT;
      *
      * @throws \RuntimeException|\Throwable
      */
-    public function chat(
+    static function chat(
         int    $empresaId,
         int    $clienteId,
         string $systemPrompt,
         array  $history,
         string $userMessage,
     ): string {
-        $apiKey = $this->resolverChave($empresaId, $clienteId);
+        $apiKey = self::resolverChave($empresaId, $clienteId);
 
         $contents = array_map(
             fn ($turn) => [
@@ -102,7 +102,7 @@ PROMPT;
 
         $contents[] = ['role' => 'user', 'parts' => [['text' => $userMessage]]];
 
-        $url = self::API_BASE . self::MODEL . ':generateContent?key=' . $apiKey;
+        $url = self::API_BASE.':generateContent?key='.$apiKey;
 
         try {
             $response = Http::timeout(30)->post($url, [
@@ -140,6 +140,56 @@ PROMPT;
         }
     }
 
+    /**
+     * Resposta "livre": recebe a chave já resolvida e um system prompt montado
+     * externamente. Usado no atendimento via WhatsApp, onde a consulta é ad-hoc
+     * por número de processo (sem cliente cadastrado).
+     *
+     * @param array $history [['role' => 'user'|'model', 'text' => string], ...]
+     *
+     * @throws \RuntimeException|\Throwable
+     */
+    static function responder(
+        $apiKey = NULL,
+        $systemPrompt = NULL,
+        $userMessage =NULL,
+        $history = [],
+    ){
+        $contents = array_map(
+            fn ($turn) => [
+                'role'  => $turn['role'],
+                'parts' => [['text' => $turn['text']]],
+            ],
+            $history,
+        );
+
+        $contents[] = ['role' => 'user', 'parts' => [['text' => $userMessage]]];
+
+        $url = self::API_BASE.':generateContent?key='.$apiKey;
+
+        $response = Http::timeout(30)->post($url, [
+            'system_instruction' => ['parts' => [['text' => $systemPrompt]]],
+            'contents'           => $contents,
+            'generationConfig'   => ['thinkingConfig' => ['thinkingBudget' => 0]],
+        ]);
+
+        if ($response->failed()) {
+            logger()->error('GeminiService: falha na API (responder)', [
+                'status' => $response->status(),
+                'body'   => $response->body(),
+            ]);
+            throw new \RuntimeException('Erro na API Gemini: ' . $response->status());
+        }
+
+        $text = $response->json('candidates.0.content.parts.0.text');
+
+        if (! is_string($text) || $text === '') {
+            throw new \RuntimeException('Resposta vazia recebida da API Gemini.');
+        }
+
+        return $text;
+    }
+
     // ─────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────
@@ -148,7 +198,7 @@ PROMPT;
      * Resolve a chave da API: primeiro tenta a chave vinculada ao cliente,
      * depois qualquer chave da empresa.
      */
-    private function resolverChave(int $empresaId, int $clienteId): string
+    private static function resolverChave(int $empresaId, int $clienteId): string
     {
         // 1. Chave específica do cliente
         if ($clienteId > 0) {
@@ -192,7 +242,7 @@ PROMPT;
         );
     }
 
-    private function buildProcessoText(Processo $p, int $empresaId): string
+    private static function buildProcessoText(Processo $p, int $empresaId): string
     {
         $text  = "PROCESSO: {$p->numero}\n";
         $text .= 'Situação: ' . ($p->ativo ? 'Em andamento' : 'Encerrado') . "\n";

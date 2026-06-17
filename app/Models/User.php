@@ -39,6 +39,11 @@ class User extends Authenticatable
             ->withTimestamps();
     }
 
+    public function mcpTokens(): HasMany
+    {
+        return $this->hasMany(McpToken::class);
+    }
+
     public function isSuperAdmin(): bool
     {
         return (bool) $this->is_super_admin;

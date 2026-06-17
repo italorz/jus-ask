@@ -113,7 +113,7 @@ class MultiTenancyTest extends TestCase
             ->set('nome', 'Cliente X')
             ->set('email', 'cliente@x.com')
             ->set('cpf', '111.111.111-11')
-            ->set('oab', 'OAB-X')
+            ->set('telefone', '11111111111')
             ->call('salvar')
             ->assertHasNoErrors();
 
@@ -123,7 +123,7 @@ class MultiTenancyTest extends TestCase
             ->set('nome', 'Cliente Y')
             ->set('email', 'cliente@x.com')
             ->set('cpf', '111.111.111-11')
-            ->set('oab', 'OAB-Y')
+            ->set('telefone', '22222222222')
             ->call('salvar')
             ->assertHasErrors(['email', 'cpf']);
 
@@ -136,7 +136,7 @@ class MultiTenancyTest extends TestCase
             ->set('nome', 'Cliente X no B')
             ->set('email', 'cliente@x.com')
             ->set('cpf', '111.111.111-11')
-            ->set('oab', 'OAB-XB')
+            ->set('telefone', '11111111111')
             ->call('salvar')
             ->assertHasNoErrors();
 
