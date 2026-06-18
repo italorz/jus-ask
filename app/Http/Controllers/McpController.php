@@ -29,6 +29,7 @@ class McpController extends Controller
             'plainToken' => session('mcp_plain_token'),
             'tenant' => $tenant,
             'mcpUrl' => url('/mcp/jus-ask'),
+            'restEndpoint' => route('mcp.processos'),
         ]);
     }
 

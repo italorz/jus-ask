@@ -10,6 +10,7 @@
         "google-gemini-php/laravel": "^2.0",
         "laravel/framework": "^13.8",
         "laravel/mcp": "^0.8.1",
+        "laravel/passport": "^13.7",
         "laravel/tinker": "^3.0",
         "laravel/ui": "^4.6",
         "league/commonmark": "^2.8",

@@ -22,10 +22,6 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         $middleware->prependToPriorityList(SubstituteBindings::class, ResolveTenant::class);
 
-        $middleware->alias([
-            'mcp.token' => \App\Http\Middleware\AuthenticateMcpToken::class,
-        ]);
-
         // APIs externas (Evolution API e MCP) não enviam token CSRF.
         $middleware->validateCsrfTokens(except: [
             'mcp/processos',

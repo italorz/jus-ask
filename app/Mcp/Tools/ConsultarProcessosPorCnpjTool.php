@@ -30,9 +30,7 @@ class ConsultarProcessosPorCnpjTool extends Tool
             'cnpj.required' => 'Informe o CNPJ da parte (14 dígitos), ex.: 52123916000132.',
         ]);
 
-        // tenant: argumento > resolvido pelo middleware (transporte web) > null (service usa fallback).
-        $tenant = $validated['tenant']
-            ?? app(TenantManager::class)->tenant();
+        $tenant = $this->resolverTenant($request, $validated['tenant'] ?? null);
 
         try {
             $resultado = $service->consultarPorCnpj($validated['cnpj'], $tenant);
@@ -60,6 +58,26 @@ class ConsultarProcessosPorCnpjTool extends Tool
             'tenant' => $schema->string()
                 ->description('Tenant da empresa cujo token CNJ deve ser usado. Opcional; quando omitido, usa o token padrão.'),
         ];
+    }
+
+    /**
+     * Resolve o tenant cujo token CNJ será usado.
+     *
+     * No transporte web (OAuth) há um usuário autenticado: o tenant é restrito às
+     * empresas das quais ele é membro ativo — assim ninguém usa o token CNJ de outra
+     * empresa. No transporte local (stdio, sem usuário) usa o argumento ou o fallback.
+     */
+    private function resolverTenant(Request $request, ?string $tenantArg): ?string
+    {
+        $user = $request->user();
+
+        if ($user) {
+            $tenants = $user->membros()->where('ativo', true)->pluck('tenant');
+
+            return $tenants->contains($tenantArg) ? $tenantArg : $tenants->first();
+        }
+
+        return $tenantArg ?? app(TenantManager::class)->tenant();
     }
 
     /**
