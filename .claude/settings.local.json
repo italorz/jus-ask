@@ -29,7 +29,9 @@
       "Bash(php -l app/Livewire/Chat/ChatPublico.php)",
       "Bash(php -l app/Http/Middleware/ResolveTenant.php)",
       "mcp__plugin_desktop-commander_desktop-commander__read_multiple_files",
-      "mcp__plugin_desktop-commander_desktop-commander__read_file"
+      "mcp__plugin_desktop-commander_desktop-commander__read_file",
+      "Bash(curl -s -o /dev/null -w 'HTTP %{http_code}\\\\n' -X POST https://idm9u8cezj32xtyfqk29n631.89.117.72.98.sslip.io/mcp/jus-ask -H 'Accept: application/json, text/event-stream' -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}')",
+      "Bash(curl -s -i -X POST https://idm9u8cezj32xtyfqk29n631.89.117.72.98.sslip.io/mcp/jus-ask -H 'Content-Type: application/json' -d '{}')"
     ]
   }
 }
