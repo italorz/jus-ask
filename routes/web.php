@@ -12,9 +12,11 @@ use App\Livewire\Chat\ChatPublico;
 use App\Livewire\ChavesGemini\GerenciarChavesGemini;
 use App\Livewire\Clientes\GerenciarClientes;
 use App\Livewire\Notificacoes\GerenciarNotificacoes;
+use App\Livewire\Processos\ConsultaProcessoCnpj;
 use App\Livewire\Processos\DetalheProcesso;
 use App\Livewire\Processos\GerenciarProcessos;
 use App\Livewire\Site\GerenciarSite;
+use App\Livewire\Tokens\TokenCnjAtual;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
@@ -74,6 +76,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/home', [HomeController::class, 'index'])->name('home');
     Route::post('/empresa/trocar', [EmpresaController::class, 'trocar'])->name('empresa.trocar');
 
+    // Tela de teste: consulta de processos por CNPJ reaproveitando a lógica da tool MCP.
+    // Não é tenant-scoped — usa sempre o último token CNJ gerado.
+    Route::get('/consulta-processo-cnpj', ConsultaProcessoCnpj::class)->name('consulta-cnpj');
+
     Route::get('/admin/empresas', ListaEmpresas::class)
         ->middleware('can:super-admin')
         ->name('admin.empresas');
@@ -90,5 +96,8 @@ Route::middleware('auth')->group(function () {
         // Gestão do token MCP (a consulta em si é a rota global mcp.processos).
         Route::get('/mcp', [McpController::class, 'index'])->name('mcp.index');
         Route::post('/mcp/token', [McpController::class, 'regenerateToken'])->name('mcp.token.regenerate');
+
+        // Último token CNJ cadastrado para o tenant ativo (visualização + copiar).
+        Route::get('/token-cnj-atual', TokenCnjAtual::class)->name('token-cnj.atual');
     });
 });

@@ -42,7 +42,7 @@ class ConsultarProcessosPorCnpjTool extends Tool
             return Response::error('Não foi possível consultar os processos: ' . $e->getMessage());
         }
 
-        return Response::structured($this->resumir(
+        return Response::structured(McpProcessoService::resumir(
             $resultado['cnpj'],
             $resultado['data']['content'] ?? [],
         ));
@@ -78,61 +78,5 @@ class ConsultarProcessosPorCnpjTool extends Tool
         }
 
         return $tenantArg ?? app(TenantManager::class)->tenant();
-    }
-
-    /**
-     * Transforma a lista crua do PDPJ em resumo por processo + agregações para gráficos.
-     *
-     * @param array<int, array<string, mixed>> $content
-     * @return array<string, mixed>
-     */
-    private function resumir(string $cnpj, array $content): array
-    {
-        $processos = [];
-        $porTribunal = [];
-        $porAno = [];
-        $porClasse = [];
-
-        foreach ($content as $item) {
-            $tram = $item['tramitacoes'][0] ?? [];
-
-            $tribunal = $tram['tribunal']['nome'] ?? ($item['siglaTribunal'] ?? 'Não informado');
-            $sigla = $tram['tribunal']['sigla'] ?? ($item['siglaTribunal'] ?? null);
-            $classe = $tram['classe'][0]['descricao'] ?? 'Não informada';
-            $assunto = $tram['assunto'][0]['descricao'] ?? null;
-            $ano = isset($tram['dataHoraAjuizamento'])
-                ? substr((string) $tram['dataHoraAjuizamento'], 0, 4)
-                : 'Não informado';
-
-            $processos[] = [
-                'numero' => $item['numeroProcesso'] ?? null,
-                'tribunal' => $tribunal,
-                'sigla' => $sigla,
-                'classe' => $classe,
-                'assunto' => $assunto,
-                'valor_acao' => $tram['valorAcao'] ?? null,
-                'ano_ajuizamento' => $ano,
-                'orgao_julgador' => $tram['orgaoJulgador']['nome'] ?? null,
-            ];
-
-            $porTribunal[$sigla ?? $tribunal] = ($porTribunal[$sigla ?? $tribunal] ?? 0) + 1;
-            $porAno[$ano] = ($porAno[$ano] ?? 0) + 1;
-            $porClasse[$classe] = ($porClasse[$classe] ?? 0) + 1;
-        }
-
-        ksort($porAno);
-        arsort($porTribunal);
-        arsort($porClasse);
-
-        return [
-            'cnpj' => $cnpj,
-            'total' => count($processos),
-            'processos' => $processos,
-            'agregacoes' => [
-                'por_tribunal' => $porTribunal,
-                'por_ano' => $porAno,
-                'por_classe' => $porClasse,
-            ],
-        ];
     }
 }
