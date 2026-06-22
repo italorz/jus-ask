@@ -32,23 +32,62 @@ class McpProcessoService
 
         $token = trim(str_replace('Bearer ', '', (string) $token));
 
-        $rota = 'https://portaldeservicos.pdpj.jus.br/api/v2/processos?cpfCnpjParte='.$cnpjLimpo;
+        $rotaBase = 'https://portaldeservicos.pdpj.jus.br/api/v2/processos?cpfCnpjParte='.$cnpjLimpo;
 
-        // User-Agent + withoutVerifying evitam o 403 do WAF do PDPJ (mesmo padrão do ProcessoApiService).
-        $response = Http::timeout(20)
-            ->withToken($token)
-            ->withHeaders(['User-Agent' => 'curl/8.19.0'])
-            ->withoutVerifying()
-            ->get($rota);
+        // O PDPJ pagina via "searchAfter": cada resposta traz, no topo, os marcadores
+        // (data + id do último processo) que devem ser repassados na próxima chamada.
+        // Percorremos todas as páginas até esgotar os resultados, acumulando o "content".
+        $conteudo = [];
+        $searchAfter = null;
+        $total = null;
+        $pagina = 0;
+        $maxPaginas = 100; // trava de segurança contra loop infinito.
 
-        if (! $response->successful()) {
-            throw new RequestException($response);
-        }
+        do {
+            $rota = $rotaBase;
+
+            if (! empty($searchAfter)) {
+                // Vai como "&searchAfter=1739462225999,50069451620248080021".
+                $rota .= '&searchAfter='.implode(',', $searchAfter);
+            }
+
+            // User-Agent + withoutVerifying evitam o 403 do WAF do PDPJ (mesmo padrão do ProcessoApiService).
+            $response = Http::timeout(20)
+                ->withToken($token)
+                ->withHeaders(['User-Agent' => 'curl/8.19.0'])
+                ->withoutVerifying()
+                ->get($rota);
+
+            if (! $response->successful()) {
+                throw new RequestException($response);
+            }
+
+            $json = $response->json();
+            $itens = $json['content'] ?? [];
+            $total = $json['total'] ?? $total;
+
+            if (empty($itens)) {
+                break;
+            }
+
+            $conteudo = array_merge($conteudo, $itens);
+            $searchAfter = $json['searchAfter'] ?? null;
+            $pagina++;
+        } while (
+            ! empty($searchAfter)
+            && count($conteudo) < ($total ?? PHP_INT_MAX)
+            && $pagina < $maxPaginas
+        );
 
         return [
             'cnpj' => $cnpjLimpo,
             'tenant' => $tenant,
-            'data' => $response->json(),
+            'data' => [
+                'total' => $total ?? count($conteudo),
+                'numberOfElements' => count($conteudo),
+                'paginas' => $pagina,
+                'content' => $conteudo,
+            ],
         ];
     }
 
