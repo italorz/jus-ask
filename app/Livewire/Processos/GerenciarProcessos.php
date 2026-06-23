@@ -7,9 +7,12 @@ use App\Models\Processo;
 use App\Services\ProcessoApiService;
 use App\Services\TenantManager;
 use Livewire\Component;
+use Livewire\WithPagination;
 
 class GerenciarProcessos extends Component
 {
+    use WithPagination;
+
     public ?int   $processoId        = null;
     public bool   $mostrarForm       = false;
 
@@ -93,13 +96,15 @@ class GerenciarProcessos extends Component
 
     public function sincronizar(int $id): void
     {
-        $processo  = Processo::findOrFail($id);
-        $resultado = ProcessoApiService::sincronizarComVerificacao($processo);
+        $processo = Processo::findOrFail($id);
 
-        if ($resultado['atualizado']) {
-            session()->flash('status', 'Processo sincronizado com nova atualização.');
+        // Sincronização manual = forçada: ignora a barreira de "sem novas atualizações".
+        $res = ProcessoApiService::sincronizarForcado($processo);
+
+        if ($res['ok']) {
+            session()->flash('status', 'Processo sincronizado (forçado) com os dados atuais do PDPJ.');
         } else {
-            session()->flash('warning', 'Processo sincronizado sem novas atualizações.');
+            session()->flash('warning', 'Não foi possível consultar o PDPJ agora. Tente novamente.');
         }
     }
 
@@ -125,7 +130,7 @@ class GerenciarProcessos extends Component
     public function render()
     {
         return view('livewire.processos.gerenciar-processos', [
-            'processos' => Processo::with('cliente')->orderByDesc('ultima_atualizacao')->get(),
+            'processos' => Processo::with('cliente')->orderByDesc('ultima_atualizacao')->paginate(15),
             'clientes'  => Cliente::orderBy('nome')->get(),
         ])->extends('layouts.app');
     }

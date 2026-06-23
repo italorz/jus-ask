@@ -101,5 +101,10 @@
                 </tbody>
             </table>
         </div>
+        @if ($processos->hasPages())
+            <div class="card-footer">
+                {{ $processos->links('pagination::bootstrap-5') }}
+            </div>
+        @endif
     </div>
 </div>

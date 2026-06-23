@@ -7,6 +7,7 @@ use App\Models\Notificacao;
 use App\Models\Processo;
 use App\Models\ProcessoContato;
 use App\Models\ProcessoConteudo;
+use App\Services\ProcessoApiService;
 use App\Services\TenantManager;
 use Livewire\Component;
 
@@ -31,6 +32,19 @@ class DetalheProcesso extends Component
 
         $this->processo       = $processo;
         $this->numeroProcesso = $processo->numero;
+    }
+
+    /** Sincronização manual = forçada (ignora a barreira de "sem novas atualizações"). */
+    public function sincronizar(): void
+    {
+        $res = ProcessoApiService::sincronizarForcado($this->processo);
+
+        if ($res['ok']) {
+            $this->processo = $this->processo->refresh();
+            session()->flash('status', 'Processo sincronizado (forçado) com os dados atuais do PDPJ.');
+        } else {
+            session()->flash('warning', 'Não foi possível consultar o PDPJ agora. Tente novamente.');
+        }
     }
 
     protected function rules(): array

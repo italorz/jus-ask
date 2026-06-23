@@ -267,12 +267,14 @@ class GerenciarClientes extends Component
     public function sincronizarProcesso(int $id): void
     {
         $processo = Processo::findOrFail($id);
-        $resultado = app(ProcessoApiService::class)->sincronizarComVerificacao($processo);
 
-        if ($resultado['atualizado']) {
-            session()->flash('status', 'Processo sincronizado com nova atualizacao.');
+        // Sincronização manual = forçada: ignora a barreira de "sem novas atualizações".
+        $res = ProcessoApiService::sincronizarForcado($processo);
+
+        if ($res['ok']) {
+            session()->flash('status', 'Processo sincronizado (forçado) com os dados atuais do PDPJ.');
         } else {
-            session()->flash('warning', 'Processo sincronizado sem novas atualizacoes.');
+            session()->flash('warning', 'Não foi possível consultar o PDPJ agora. Tente novamente.');
         }
     }
 

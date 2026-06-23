@@ -3,18 +3,37 @@
         <a href="{{ route('processos', ['tenant' => app(\App\Services\TenantManager::class)->tenant()]) }}" class="text-decoration-none">&larr; Voltar aos processos</a>
     </div>
 
-    <h1 class="h3">Processo {{ $processo->numero }}</h1>
-    <p class="text-muted">
-        Cliente: <strong>{{ $processo->cliente?->nome }}</strong>
-        @if ($processo->ativo)
-            <span class="badge bg-success">Ativo</span>
-        @else
-            <span class="badge bg-secondary">Encerrado</span>
-        @endif
-    </p>
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+        <div>
+            <h1 class="h3 mb-1">Processo {{ $processo->numero }}</h1>
+            <p class="text-muted mb-0">
+                Cliente: <strong>{{ $processo->cliente?->nome }}</strong>
+                @if ($processo->ativo)
+                    <span class="badge bg-success">Ativo</span>
+                @else
+                    <span class="badge bg-secondary">Inativo</span>
+                @endif
+                @if ($processo->situacao)
+                    <span class="badge bg-{{ $processo->situacao === 'concluido' ? 'secondary' : 'primary' }}">
+                        {{ $processo->situacao === 'concluido' ? 'Concluído' : 'Em andamento' }}
+                    </span>
+                @endif
+            </p>
+        </div>
+        <button class="btn btn-outline-primary" wire:click="sincronizar" wire:loading.attr="disabled" wire:target="sincronizar">
+            <span wire:loading.remove wire:target="sincronizar">&#8635; Sincronizar</span>
+            <span wire:loading wire:target="sincronizar">
+                <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                Sincronizando...
+            </span>
+        </button>
+    </div>
 
     @if (session('status'))
-        <div class="alert alert-success">{{ session('status') }}</div>
+        <div class="alert alert-success mt-3">{{ session('status') }}</div>
+    @endif
+    @if (session('warning'))
+        <div class="alert alert-warning mt-3">{{ session('warning') }}</div>
     @endif
 
     <div class="card mb-4">

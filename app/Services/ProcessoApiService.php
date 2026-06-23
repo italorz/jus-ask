@@ -170,6 +170,26 @@ class ProcessoApiService
         return ['atualizado' => true, 'tamanho_anterior' => $tamanhoAtual, 'tamanho_novo' => $tamanhoNovo];
     }
 
+    /**
+     * Sincronização MANUAL (forçada): ignora a barreira de "sem novas atualizações"
+     * (comparação de tamanho) e sempre grava o snapshot atual do PDPJ. Usado pelos
+     * botões "Sincronizar" — o usuário está forçando de propósito.
+     *
+     * @return array{ok: bool, processo?: Processo}
+     */
+    static function sincronizarForcado(Processo $processo): array
+    {
+        $json = self::consultarApi($processo->numero, $processo->tenant);
+
+        if ($json === null) {
+            return ['ok' => false];
+        }
+
+        self::persistirSnapshot($processo, $json);
+
+        return ['ok' => true, 'processo' => $processo->refresh()];
+    }
+
     static function verificarProcessosAtivos(): int
     {
         $processos = Processo::withoutGlobalScopes()
