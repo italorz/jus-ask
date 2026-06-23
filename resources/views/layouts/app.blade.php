@@ -15,6 +15,9 @@
 
     <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
 
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
     @vite(['resources/sass/app.scss', 'resources/js/app.js'])
     @livewireStyles
 
@@ -153,39 +156,42 @@
 
                 <nav class="sidebar-nav">
                     <a class="sidebar-link {{ request()->routeIs('home') ? 'active' : '' }}" href="{{ route('home') }}">
-                        <span class="ico">🏠</span> Painel
+                        <i class="ico bi bi-house"></i> Painel
                     </a>
                     <a class="sidebar-link {{ request()->routeIs('consulta-cnpj') ? 'active' : '' }}" href="{{ route('consulta-cnpj') }}">
-                        <span class="ico">🔎</span> Consulta CNPJ
+                        <i class="ico bi bi-search"></i> Consulta CNPJ
                     </a>
 
                     @if ($tenant->check())
                         <div class="sidebar-section">{{ $tenant->empresa()?->nome ?? 'Empresa' }}</div>
 
                         <a class="sidebar-link {{ request()->routeIs('clientes') ? 'active' : '' }}" href="{{ route('clientes', ['tenant' => $tenant->tenant()]) }}">
-                            <span class="ico">👤</span> Clientes
+                            <i class="ico bi bi-people"></i> Clientes
                         </a>
                         <a class="sidebar-link {{ request()->routeIs('processos') ? 'active' : '' }}" href="{{ route('processos', ['tenant' => $tenant->tenant()]) }}">
-                            <span class="ico">⚖️</span> Processos
+                            <i class="ico bi bi-briefcase"></i> Processos
+                        </a>
+                        <a class="sidebar-link {{ request()->routeIs('graficos') ? 'active' : '' }}" href="{{ route('graficos', ['tenant' => $tenant->tenant()]) }}">
+                            <i class="ico bi bi-bar-chart"></i> Gráficos
                         </a>
                         <a class="sidebar-link {{ request()->routeIs('site') ? 'active' : '' }}" href="{{ route('site', ['tenant' => $tenant->tenant()]) }}">
-                            <span class="ico">🌐</span> Meu site
+                            <i class="ico bi bi-globe2"></i> Meu site
                         </a>
                         <a class="sidebar-link {{ request()->routeIs('chaves-gemini') ? 'active' : '' }}" href="{{ route('chaves-gemini', ['tenant' => $tenant->tenant()]) }}">
-                            <span class="ico">🔑</span> Chaves IA
+                            <i class="ico bi bi-key"></i> Chaves IA
                         </a>
                         <a class="sidebar-link {{ request()->routeIs('mcp.*') ? 'active' : '' }}" href="{{ route('mcp.index', ['tenant' => $tenant->tenant()]) }}">
-                            <span class="ico">🔌</span> MCP
+                            <i class="ico bi bi-plug"></i> MCP
                         </a>
                         <a class="sidebar-link {{ request()->routeIs('token-cnj.atual') ? 'active' : '' }}" href="{{ route('token-cnj.atual', ['tenant' => $tenant->tenant()]) }}">
-                            <span class="ico">🎫</span> Token CNJ
+                            <i class="ico bi bi-shield-lock"></i> Token CNJ
                         </a>
                     @endif
 
                     @can('super-admin')
                         <div class="sidebar-section">Admin</div>
                         <a class="sidebar-link {{ request()->routeIs('admin.empresas') ? 'active' : '' }}" href="{{ route('admin.empresas') }}">
-                            <span class="ico">🏢</span> Empresas
+                            <i class="ico bi bi-building"></i> Empresas
                         </a>
                     @endcan
                 </nav>
@@ -222,7 +228,7 @@
                             <a class="nav-link position-relative px-2"
                                href="{{ route('notificacoes', ['tenant' => $tenant->tenant()]) }}"
                                title="Notificações">
-                                🔔
+                                <i class="bi bi-bell fs-5"></i>
                                 @if ($notifCount > 0)
                                     <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
                                           style="font-size:.55rem;padding:.25em .45em;">

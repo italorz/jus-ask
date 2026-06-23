@@ -15,6 +15,7 @@ use App\Livewire\Notificacoes\GerenciarNotificacoes;
 use App\Livewire\Processos\ConsultaProcessoCnpj;
 use App\Livewire\Processos\DetalheProcesso;
 use App\Livewire\Processos\GerenciarProcessos;
+use App\Livewire\Processos\GraficosProcessos;
 use App\Livewire\Site\GerenciarSite;
 use App\Livewire\Tokens\TokenCnjAtual;
 use Illuminate\Support\Facades\Auth;
@@ -88,6 +89,7 @@ Route::middleware('auth')->group(function () {
     Route::prefix('{tenant}')->group(function () {
         Route::get('/clientes', GerenciarClientes::class)->name('clientes');
         Route::get('/processos', GerenciarProcessos::class)->name('processos');
+        Route::get('/graficos', GraficosProcessos::class)->name('graficos');
         Route::get('/processos/{processo}', DetalheProcesso::class)->name('processos.detalhe');
         Route::get('/site', GerenciarSite::class)->name('site');
         Route::get('/chaves-gemini', GerenciarChavesGemini::class)->name('chaves-gemini');
