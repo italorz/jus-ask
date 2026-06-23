@@ -16,7 +16,7 @@ use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('consultar-processos-por-cnpj')]
-#[Description('Consulta os processos de uma parte (pessoa jurídica) por CNPJ na base do PDPJ/CNJ. Retorna agregações por tribunal, ano e classe (prontas para gráficos), o total real e uma amostra dos processos. Consultas grandes (milhares de processos) são processadas em segundo plano: a primeira chamada retorna status "processing" e as chamadas seguintes retornam o andamento e, ao final, o resultado completo.')]
+#[Description('Consulta os processos de uma parte (pessoa jurídica) por CNPJ na base do PDPJ/CNJ e salva no banco do sistema. A 1ª chamada coleta os processos (cadastra a empresa como Cliente e grava cada processo como inativo, fora do monitoramento) — consultas grandes rodam em segundo plano. Chamadas seguintes retornam o andamento, as agregações (tribunal/ano/classe) e, via parâmetro "pagina", os processos já salvos no banco em lotes. Use "cancelar" para interromper uma coleta em andamento.')]
 #[IsReadOnly]
 #[IsIdempotent]
 class ConsultarProcessosPorCnpjTool extends Tool
@@ -26,19 +26,36 @@ class ConsultarProcessosPorCnpjTool extends Tool
         $validated = $request->validate([
             'cnpj' => ['required', 'string'],
             'tenant' => ['nullable', 'string'],
+            'pagina' => ['nullable', 'integer', 'min:1'],
             'atualizar' => ['nullable', 'boolean'],
+            'cancelar' => ['nullable', 'boolean'],
         ], [
             'cnpj.required' => 'Informe o CNPJ da parte (14 dígitos), ex.: 52123916000132.',
         ]);
 
         $tenant = $this->resolverTenant($request, $validated['tenant'] ?? null);
 
+        if (empty($tenant)) {
+            return Response::error('Não foi possível resolver a empresa (tenant) para esta consulta.');
+        }
+
         try {
-            $resultado = McpProcessoService::consultar(
+            // Cancelar uma coleta em andamento.
+            if (! empty($validated['cancelar'])) {
+                return Response::structured(McpProcessoService::cancelar($validated['cnpj'], $tenant));
+            }
+
+            // Ler os processos já salvos no banco, em lotes (processo a processo / por página).
+            if (! empty($validated['pagina'])) {
+                return Response::structured(McpProcessoService::lerDoBanco($validated['cnpj'], $tenant, (int) $validated['pagina']));
+            }
+
+            // Disparar/consultar (coleta + salva no banco) e devolver status/agregações.
+            return Response::structured(McpProcessoService::consultar(
                 $validated['cnpj'],
                 $tenant,
                 (bool) ($validated['atualizar'] ?? false),
-            );
+            ));
         } catch (\InvalidArgumentException $e) {
             return Response::error($e->getMessage());
         } catch (RequestException $e) {
@@ -46,8 +63,6 @@ class ConsultarProcessosPorCnpjTool extends Tool
         } catch (\Throwable $e) {
             return Response::error('Não foi possível consultar os processos: ' . $e->getMessage());
         }
-
-        return Response::structured($resultado);
     }
 
     public function schema(JsonSchema $schema): array
@@ -58,19 +73,21 @@ class ConsultarProcessosPorCnpjTool extends Tool
                 ->required(),
 
             'tenant' => $schema->string()
-                ->description('Tenant da empresa cujo token CNJ deve ser usado. Opcional; quando omitido, usa o token padrão.'),
+                ->description('Tenant da empresa cujo token CNJ deve ser usado. Opcional; quando omitido, usa o do usuário/padrão.'),
+
+            'pagina' => $schema->integer()
+                ->description('Opcional. Lê os processos já salvos no banco em lotes (página 1, 2, ...).'),
 
             'atualizar' => $schema->boolean()
-                ->description('Opcional. Força refazer a consulta ignorando o cache (use só se quiser dados novos).'),
+                ->description('Opcional. Força refazer a coleta no PDPJ ignorando o cache.'),
+
+            'cancelar' => $schema->boolean()
+                ->description('Opcional. Cancela uma coleta em andamento (mantém o que já foi salvo).'),
         ];
     }
 
     /**
-     * Resolve o tenant cujo token CNJ será usado.
-     *
-     * No transporte web (OAuth) há um usuário autenticado: o tenant é restrito às
-     * empresas das quais ele é membro ativo. No transporte local (stdio, sem usuário)
-     * usa o argumento ou o fallback.
+     * Resolve o tenant cujo token CNJ será usado e onde os dados serão salvos.
      */
     private function resolverTenant(Request $request, ?string $tenantArg): ?string
     {

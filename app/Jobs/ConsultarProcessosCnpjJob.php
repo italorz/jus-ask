@@ -11,18 +11,15 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Cache;
 
 /**
- * Coleta TODOS os processos de um CNPJ no PDPJ em segundo plano (consultas grandes,
- * que levam minutos por causa da paginação sequencial via searchAfter) e guarda o
- * resultado agregado em cache para a tool MCP / página / endpoint REST consumirem.
+ * Coleta TODOS os processos de um CNPJ no PDPJ em segundo plano e salva no banco
+ * (Cliente por CNPJ + Processos com ativo=false), respeitando throttle/retry e o
+ * pedido de cancelamento. O andamento e o resultado ficam no cache de status.
  */
 class ConsultarProcessosCnpjJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    /**
-     * Tempo máximo do job. Com o throttle anti-429, consultas grandes ficam mais
-     * lentas (ex.: ~9.000 processos ≈ 15-20 min), então damos margem folgada.
-     */
+    /** Com o throttle anti-429, ~9.000 processos podem levar ~15-20 min. */
     public int $timeout = 2400;
 
     public int $tries = 1;
@@ -35,38 +32,20 @@ class ConsultarProcessosCnpjJob implements ShouldQueue
 
     public function handle(): void
     {
-        $key = McpProcessoService::cacheKey($this->cnpj, $this->tenant);
-
         try {
-            $token = McpProcessoService::tokenPara($this->tenant);
-
-            if (empty($token)) {
-                throw new \RuntimeException('Nenhum token CNJ cadastrado para consultar o PDPJ.');
-            }
-
-            $primeira = McpProcessoService::buscarPagina($this->cnpj, $token, null);
-
-            $resultado = McpProcessoService::coletarTudo(
-                $this->cnpj,
-                $token,
-                $primeira,
-                McpProcessoService::MAX_PAGINAS_TOTAL,
-                $key, // grava progresso no próprio cache
-            );
-
-            $resultado['status'] = 'done';
-            $resultado['tenant'] = $this->tenant;
-            $resultado['atualizado_em'] = now()->toIso8601String();
-
-            Cache::put($key, $resultado, now()->addMinutes(60));
+            McpProcessoService::coletarCompleto($this->cnpj, (string) $this->tenant);
         } catch (\Throwable $e) {
-            Cache::put($key, [
-                'status' => 'error',
-                'cnpj' => $this->cnpj,
-                'tenant' => $this->tenant,
-                'erro' => $e->getMessage(),
-                'atualizado_em' => now()->toIso8601String(),
-            ], now()->addMinutes(10));
+            Cache::put(
+                McpProcessoService::statusKey($this->cnpj, $this->tenant),
+                [
+                    'status' => 'error',
+                    'cnpj' => $this->cnpj,
+                    'tenant' => $this->tenant,
+                    'erro' => $e->getMessage(),
+                    'atualizado_em' => now()->toIso8601String(),
+                ],
+                now()->addMinutes(10),
+            );
         }
     }
 }

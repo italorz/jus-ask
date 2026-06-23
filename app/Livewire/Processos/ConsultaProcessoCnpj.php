@@ -3,6 +3,7 @@
 namespace App\Livewire\Processos;
 
 use App\Services\McpProcessoService;
+use App\Services\TenantManager;
 use Illuminate\Http\Client\RequestException;
 use Livewire\Component;
 
@@ -10,10 +11,28 @@ class ConsultaProcessoCnpj extends Component
 {
     public string $cnpj = '';
 
-    /** @var array<string, mixed>|null */
+    /** @var array<string, mixed>|null  Status + agregações da consulta. */
     public ?array $resultado = null;
 
+    /** @var array<string, mixed>|null  Lote atual de processos lido do banco. */
+    public ?array $lote = null;
+
+    public int $pagina = 1;
+
     public ?string $erro = null;
+
+    public ?string $tenant = null;
+
+    public function mount()
+    {
+        $tm = app(TenantManager::class);
+
+        if (! $tm->check()) {
+            return redirect()->route('home');
+        }
+
+        $this->tenant = $tm->tenant();
+    }
 
     public function consultar(): void
     {
@@ -23,10 +42,12 @@ class ConsultaProcessoCnpj extends Component
         );
 
         $this->erro = null;
+        $this->pagina = 1;
+        $this->lote = null;
         $this->buscar(true);
     }
 
-    /** Chamado pelo wire:poll enquanto a consulta grande roda em segundo plano (lê do cache). */
+    /** Poll enquanto a coleta grande roda em segundo plano. */
     public function atualizarStatus(): void
     {
         if (($this->resultado['status'] ?? null) === 'processing') {
@@ -34,11 +55,31 @@ class ConsultaProcessoCnpj extends Component
         }
     }
 
+    public function cancelar(): void
+    {
+        try {
+            McpProcessoService::cancelar($this->cnpj, $this->tenant);
+        } catch (\Throwable) {
+            // ignora
+        }
+
+        $this->buscar(false);
+    }
+
+    public function irPara(int $p): void
+    {
+        $this->pagina = max(1, $p);
+        $this->lote = McpProcessoService::lerDoBanco($this->cnpj, $this->tenant, $this->pagina);
+    }
+
     private function buscar(bool $atualizar): void
     {
         try {
-            // tenant = null  =>  usa sempre o último token CNJ gerado (mesma lógica da tool MCP).
-            $this->resultado = McpProcessoService::consultar($this->cnpj, null, $atualizar);
+            $this->resultado = McpProcessoService::consultar($this->cnpj, $this->tenant, $atualizar);
+
+            if (in_array($this->resultado['status'] ?? '', ['done', 'cancelado'], true)) {
+                $this->irPara(1);
+            }
         } catch (\InvalidArgumentException $e) {
             $this->erro = $e->getMessage();
             $this->resultado = null;

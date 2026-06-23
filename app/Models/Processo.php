@@ -26,6 +26,8 @@ class Processo extends Model
         'valor_acao',
         'data_hora_ultima_distribuicao',
         'assunto',
+        'tribunal',
+        'classe',
     ];
 
     protected function casts(): array
