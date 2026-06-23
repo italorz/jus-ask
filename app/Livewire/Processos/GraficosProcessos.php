@@ -33,29 +33,11 @@ class GraficosProcessos extends Component
     /** Processos ABERTOS (data de ajuizamento) por mês, nos últimos N meses, com filtros. */
     private function dados(): array
     {
-        $inicio = now()->startOfMonth()->subMonths(max(1, $this->meses) - 1);
-
-        $contagem = Processo::query()
-            ->where('tenant', $this->tenant)
-            ->whereNotNull('data_hora_ajuizamento')
-            ->where('data_hora_ajuizamento', '>=', $inicio)
-            ->when($this->filtroSituacao !== '', fn ($q) => $q->where('situacao', $this->filtroSituacao))
-            ->when($this->filtroAtivo !== '', fn ($q) => $q->where('ativo', $this->filtroAtivo === '1'))
-            ->when($this->filtroTribunal !== '', fn ($q) => $q->where('tribunal', $this->filtroTribunal))
-            ->selectRaw("to_char(data_hora_ajuizamento, 'YYYY-MM') as mes, count(*) as c")
-            ->groupBy('mes')
-            ->pluck('c', 'mes');
-
-        $labels = [];
-        $valores = [];
-
-        for ($i = 0; $i < $this->meses; $i++) {
-            $mes = now()->startOfMonth()->subMonths($this->meses - 1 - $i);
-            $labels[] = ucfirst($mes->locale('pt_BR')->isoFormat('MMM/YY'));
-            $valores[] = (int) ($contagem[$mes->format('Y-m')] ?? 0);
-        }
-
-        return ['labels' => $labels, 'valores' => $valores, 'total' => array_sum($valores)];
+        return Processo::aberturasPorMes($this->tenant, $this->meses, [
+            'situacao' => $this->filtroSituacao,
+            'ativo' => $this->filtroAtivo,
+            'tribunal' => $this->filtroTribunal,
+        ]);
     }
 
     private function tribunais()

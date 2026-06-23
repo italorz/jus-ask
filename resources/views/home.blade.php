@@ -7,6 +7,48 @@
         <h1 class="h4 mb-0 fw-bold" style="font-family:'Playfair Display',serif;">Painel</h1>
     </div>
 
+    {{-- Gráfico de processos abertos por mês (resumo; versão com filtros em Gráficos) --}}
+    @if ($empresa && isset($grafico))
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <span class="fw-semibold"><i class="bi bi-bar-chart me-1"></i> Processos abertos por mês (12 meses)</span>
+                <a href="{{ route('graficos', ['tenant' => $empresa->tenant]) }}" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-sliders me-1"></i> Ver com filtros
+                </a>
+            </div>
+            <div class="card-body">
+                <div style="height:300px;"><canvas id="painelChart"></canvas></div>
+            </div>
+        </div>
+
+        @push('scripts')
+        <script>
+            (function () {
+                var ctx = document.getElementById('painelChart');
+                if (!ctx || typeof Chart === 'undefined') return;
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: @json($grafico['labels']),
+                        datasets: [{
+                            label: 'Processos abertos',
+                            data: @json($grafico['valores']),
+                            backgroundColor: '#1a56db',
+                            borderRadius: 4,
+                            maxBarThickness: 42,
+                        }],
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } },
+                    },
+                });
+            })();
+        </script>
+        @endpush
+    @endif
+
     @if (! $empresa)
         <div class="alert alert-warning">
             Nenhuma empresa (tenant) ativa. Use o menu superior para selecionar uma empresa.

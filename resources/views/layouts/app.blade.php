@@ -17,6 +17,7 @@
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 
     @vite(['resources/sass/app.scss', 'resources/js/app.js'])
     @livewireStyles
@@ -173,6 +174,9 @@
                         </a>
                         <a class="sidebar-link {{ request()->routeIs('graficos') ? 'active' : '' }}" href="{{ route('graficos', ['tenant' => $tenant->tenant()]) }}">
                             <i class="ico bi bi-bar-chart"></i> Gráficos
+                        </a>
+                        <a class="sidebar-link {{ request()->routeIs('crm') ? 'active' : '' }}" href="{{ route('crm', ['tenant' => $tenant->tenant()]) }}">
+                            <i class="ico bi bi-kanban"></i> CRM
                         </a>
                         <a class="sidebar-link {{ request()->routeIs('site') ? 'active' : '' }}" href="{{ route('site', ['tenant' => $tenant->tenant()]) }}">
                             <i class="ico bi bi-globe2"></i> Meu site

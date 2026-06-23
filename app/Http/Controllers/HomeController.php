@@ -23,6 +23,7 @@ class HomeController extends Controller
             $dados['totalClientes'] = Cliente::count();
             $dados['totalProcessos'] = Processo::count();
             $dados['processosAbertos'] = Processo::where('ativo', true)->count();
+            $dados['grafico'] = Processo::aberturasPorMes($tenant->tenant(), 12);
         }
 
         if (auth()->user()->isSuperAdmin()) {

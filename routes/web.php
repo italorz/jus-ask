@@ -12,6 +12,7 @@ use App\Livewire\Chat\ChatPublico;
 use App\Livewire\ChavesGemini\GerenciarChavesGemini;
 use App\Livewire\Clientes\GerenciarClientes;
 use App\Livewire\Notificacoes\GerenciarNotificacoes;
+use App\Livewire\Crm\Kanban;
 use App\Livewire\Processos\ConsultaProcessoCnpj;
 use App\Livewire\Processos\DetalheProcesso;
 use App\Livewire\Processos\GerenciarProcessos;
@@ -90,6 +91,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/clientes', GerenciarClientes::class)->name('clientes');
         Route::get('/processos', GerenciarProcessos::class)->name('processos');
         Route::get('/graficos', GraficosProcessos::class)->name('graficos');
+        Route::get('/crm', Kanban::class)->name('crm');
         Route::get('/processos/{processo}', DetalheProcesso::class)->name('processos.detalhe');
         Route::get('/site', GerenciarSite::class)->name('site');
         Route::get('/chaves-gemini', GerenciarChavesGemini::class)->name('chaves-gemini');
