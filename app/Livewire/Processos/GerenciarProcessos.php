@@ -21,11 +21,37 @@ class GerenciarProcessos extends Component
     public string $ultimaAtualizacao = '';
     public bool   $ativo             = true;
 
+    // ── Pesquisa / filtros ──────────────────────────────
+    public string $busca          = '';
+    public string $filtroSituacao = ''; // '' | concluido | em_andamento
+    public string $filtroAtivo    = ''; // '' | 1 | 0
+
     public function mount()
     {
         if (! app(TenantManager::class)->check()) {
             return redirect()->route('home');
         }
+    }
+
+    public function updatedBusca(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedFiltroSituacao(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedFiltroAtivo(): void
+    {
+        $this->resetPage();
+    }
+
+    public function limparFiltros(): void
+    {
+        $this->reset(['busca', 'filtroSituacao', 'filtroAtivo']);
+        $this->resetPage();
     }
 
     protected function rules(): array
@@ -129,8 +155,46 @@ class GerenciarProcessos extends Component
 
     public function render()
     {
+        $termo = trim($this->busca);
+        $digitos = preg_replace('/\D+/', '', $termo) ?? '';
+
+        $processos = Processo::query()
+            ->with('cliente')
+            ->when($termo !== '', function ($q) use ($termo, $digitos) {
+                $q->where(function ($sub) use ($termo, $digitos) {
+                    // Campos do processo
+                    $sub->where('numero', 'like', "%{$termo}%")
+                        ->orWhere('assunto', 'like', "%{$termo}%")
+                        ->orWhere('tribunal', 'like', "%{$termo}%")
+                        ->orWhere('classe', 'like', "%{$termo}%");
+
+                    // Número por dígitos (com ou sem máscara)
+                    if ($digitos !== '') {
+                        $sub->orWhereRaw("regexp_replace(numero, '\\D', '', 'g') like ?", ["%{$digitos}%"]);
+                    }
+
+                    // Dados do cliente
+                    $sub->orWhereHas('cliente', function ($c) use ($termo, $digitos) {
+                        $c->where('nome', 'like', "%{$termo}%")
+                            ->orWhere('email', 'like', "%{$termo}%")
+                            ->orWhere('cpf', 'like', "%{$termo}%")
+                            ->orWhere('cnpj', 'like', "%{$termo}%")
+                            ->orWhere('telefone', 'like', "%{$termo}%");
+
+                        if ($digitos !== '') {
+                            $c->orWhereRaw("regexp_replace(coalesce(cnpj,''), '\\D', '', 'g') like ?", ["%{$digitos}%"])
+                              ->orWhereRaw("regexp_replace(coalesce(cpf,''), '\\D', '', 'g') like ?", ["%{$digitos}%"]);
+                        }
+                    });
+                });
+            })
+            ->when($this->filtroSituacao !== '', fn ($q) => $q->where('situacao', $this->filtroSituacao))
+            ->when($this->filtroAtivo !== '', fn ($q) => $q->where('ativo', $this->filtroAtivo === '1'))
+            ->orderByDesc('ultima_atualizacao')
+            ->paginate(15);
+
         return view('livewire.processos.gerenciar-processos', [
-            'processos' => Processo::with('cliente')->orderByDesc('ultima_atualizacao')->paginate(15),
+            'processos' => $processos,
             'clientes'  => Cliente::orderBy('nome')->get(),
         ])->extends('layouts.app');
     }

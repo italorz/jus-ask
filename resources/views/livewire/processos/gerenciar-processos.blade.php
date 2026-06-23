@@ -55,7 +55,43 @@
         </div>
     @endif
 
+    {{-- Barra de pesquisa --}}
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-5">
+                    <label class="form-label mb-1 small text-muted">Pesquisar</label>
+                    <input type="text" class="form-control"
+                           placeholder="Número, assunto, tribunal, classe ou cliente (nome, CNPJ, CPF, e-mail, telefone)…"
+                           wire:model.live.debounce.400ms="busca">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label mb-1 small text-muted">Situação</label>
+                    <select class="form-select" wire:model.live="filtroSituacao">
+                        <option value="">Todas</option>
+                        <option value="em_andamento">Em andamento</option>
+                        <option value="concluido">Concluído</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label mb-1 small text-muted">Monitorado</label>
+                    <select class="form-select" wire:model.live="filtroAtivo">
+                        <option value="">Todos</option>
+                        <option value="1">Ativo</option>
+                        <option value="0">Inativo</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-grid">
+                    <button class="btn btn-outline-secondary" wire:click="limparFiltros">Limpar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span class="text-muted small">{{ $processos->total() }} processo(s) encontrado(s)</span>
+        </div>
         <div class="table-responsive">
             <table class="table table-hover mb-0 align-middle">
                 <thead>
