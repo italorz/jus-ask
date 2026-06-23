@@ -160,4 +160,32 @@
             @endif
         @endif
     @endif
+
+    {{-- Toast de conclusão (canto superior direito) --}}
+    <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index:1090;">
+        <div id="toastConsulta" class="toast align-items-center text-bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body" id="toastConsultaBody">Concluído.</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Fechar"></button>
+            </div>
+        </div>
+    </div>
+
+    @script
+    <script>
+        Livewire.on('processos-concluidos', (e) => {
+            const d = Array.isArray(e) ? e[0] : e;
+            const cancelado = d.status === 'cancelado';
+            const el = document.getElementById('toastConsulta');
+            const body = document.getElementById('toastConsultaBody');
+
+            el.classList.toggle('text-bg-success', !cancelado);
+            el.classList.toggle('text-bg-warning', cancelado);
+            body.textContent = (cancelado ? 'Consulta cancelada' : 'Processos concluídos')
+                + ' — ' + (d.total ?? 0) + ' processo(s) do CNPJ ' + (d.cnpj ?? '') + '.';
+
+            new bootstrap.Toast(el, { delay: 7000 }).show();
+        });
+    </script>
+    @endscript
 </div>

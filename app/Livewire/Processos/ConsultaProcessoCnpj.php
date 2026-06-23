@@ -50,8 +50,20 @@ class ConsultaProcessoCnpj extends Component
     /** Poll enquanto a coleta grande roda em segundo plano. */
     public function atualizarStatus(): void
     {
-        if (($this->resultado['status'] ?? null) === 'processing') {
-            $this->buscar(false);
+        if (($this->resultado['status'] ?? null) !== 'processing') {
+            return;
+        }
+
+        $this->buscar(false);
+
+        // Acabou de concluir/cancelar -> dispara o toast no canto superior direito.
+        if (in_array($this->resultado['status'] ?? '', ['done', 'cancelado'], true)) {
+            $this->dispatch(
+                'processos-concluidos',
+                status: $this->resultado['status'],
+                total: $this->resultado['total_no_banco'] ?? ($this->resultado['total'] ?? 0),
+                cnpj: $this->resultado['cnpj'] ?? '',
+            );
         }
     }
 

@@ -133,6 +133,15 @@
                         <form wire:submit="salvar" id="formDados">
                             <div class="row g-3">
                                 <div class="col-md-6">
+                                    <label class="form-label fw-semibold">Tipo <span class="text-danger">*</span></label>
+                                    <select class="form-select @error('tipo') is-invalid @enderror" wire:model="tipo">
+                                        <option value="prospeccao">Prospecção (só monitorando)</option>
+                                        <option value="prospectado">Prospectado (já abordado)</option>
+                                        <option value="cliente">Cliente (fechado)</option>
+                                    </select>
+                                    @error('tipo') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                </div>
+                                <div class="col-md-6">
                                     <label class="form-label fw-semibold">Nome <span class="text-danger">*</span></label>
                                     <input type="text"
                                            class="form-control @error('nome') is-invalid @enderror"
@@ -141,7 +150,7 @@
                                     @error('nome') <div class="invalid-feedback">{{ $message }}</div> @enderror
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label fw-semibold">Telefone <span class="text-danger">*</span></label>
+                                    <label class="form-label fw-semibold">Telefone <small class="text-muted">(opcional)</small></label>
                                     <input type="text"
                                            class="form-control @error('telefone') is-invalid @enderror"
                                            wire:model="telefone"
@@ -149,7 +158,7 @@
                                     @error('telefone') <div class="invalid-feedback">{{ $message }}</div> @enderror
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label fw-semibold">E-mail <span class="text-danger">*</span></label>
+                                    <label class="form-label fw-semibold">E-mail <small class="text-muted">(opcional)</small></label>
                                     <input type="email"
                                            class="form-control @error('email') is-invalid @enderror"
                                            wire:model="email"
@@ -157,7 +166,7 @@
                                     @error('email') <div class="invalid-feedback">{{ $message }}</div> @enderror
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label fw-semibold">CPF <span class="text-danger">*</span></label>
+                                    <label class="form-label fw-semibold">CPF <small class="text-muted">(opcional)</small></label>
                                     <input type="text"
                                            class="form-control @error('cpf') is-invalid @enderror"
                                            wire:model="cpf"
@@ -439,22 +448,29 @@
     {{-- ═══════════════════════════════════════════════════
          BUSCA + TABELA DE CLIENTES
     ════════════════════════════════════════════════════ --}}
-    <div class="mb-3">
+    <div class="mb-3 d-flex flex-wrap gap-2 align-items-center">
+        <div class="btn-group btn-group-sm" role="group" aria-label="Filtrar por tipo">
+            <button class="btn {{ $filtroTipo === '' ? 'btn-primary' : 'btn-outline-primary' }}" wire:click="$set('filtroTipo','')">Todos</button>
+            <button class="btn {{ $filtroTipo === 'cliente' ? 'btn-primary' : 'btn-outline-primary' }}" wire:click="$set('filtroTipo','cliente')">Clientes</button>
+            <button class="btn {{ $filtroTipo === 'prospectado' ? 'btn-primary' : 'btn-outline-primary' }}" wire:click="$set('filtroTipo','prospectado')">Prospectados</button>
+            <button class="btn {{ $filtroTipo === 'prospeccao' ? 'btn-primary' : 'btn-outline-primary' }}" wire:click="$set('filtroTipo','prospeccao')">Prospecção</button>
+        </div>
         <input type="text"
-               class="form-control"
-               placeholder="Buscar por nome, e-mail ou CPF…"
+               class="form-control flex-grow-1" style="min-width:220px;"
+               placeholder="Buscar por nome, e-mail, CPF ou CNPJ…"
                wire:model.live.debounce.300ms="busca">
     </div>
 
     <div class="card shadow-sm">
         <div class="table-responsive">
             <table class="table table-hover mb-0 align-middle">
+                @php $tiposBadge = ['cliente' => 'success', 'prospectado' => 'info', 'prospeccao' => 'secondary']; @endphp
                 <thead class="table-light">
                     <tr>
                         <th>Nome</th>
-                        <th>Telefone</th>
+                        <th>Tipo</th>
+                        <th>Doc.</th>
                         <th>E-mail</th>
-                        <th>CPF</th>
                         <th>Processos</th>
                         <th class="text-end">Ações</th>
                     </tr>
@@ -463,11 +479,15 @@
                     @forelse ($clientes as $cliente)
                         <tr wire:key="cliente-{{ $cliente->id }}">
                             <td>{{ $cliente->nome }}</td>
-                            <td>{{ $cliente->telefone ?? '—' }}</td>
-                            <td>{{ $cliente->email }}</td>
-                            <td>{{ $cliente->cpf }}</td>
                             <td>
-                                <span class="badge bg-secondary">{{ $cliente->processos()->count() }}</span>
+                                <span class="badge bg-{{ $tiposBadge[$cliente->tipo] ?? 'secondary' }}">
+                                    {{ $cliente->tipo === 'prospeccao' ? 'prospecção' : $cliente->tipo }}
+                                </span>
+                            </td>
+                            <td>{{ $cliente->cnpj ?: ($cliente->cpf ?: '—') }}</td>
+                            <td>{{ $cliente->email ?: '—' }}</td>
+                            <td>
+                                <span class="badge bg-secondary">{{ $cliente->processos_count }}</span>
                             </td>
                             <td class="text-end">
                                 <button class="btn btn-sm btn-outline-primary"

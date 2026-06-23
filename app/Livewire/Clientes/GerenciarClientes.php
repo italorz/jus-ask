@@ -15,6 +15,7 @@ class GerenciarClientes extends Component
     public ?int  $clienteId    = null;
     public bool  $criandoNovo  = false;   // true enquanto cria (wizard); false ao editar (abas livres)
     public string $busca       = '';
+    public string $filtroTipo  = '';     // '' | cliente | prospectado | prospeccao
     public string $abaAtiva    = 'dados'; // 'dados' | 'processos' | 'chave'
 
     // Campos do cliente
@@ -337,23 +338,32 @@ class GerenciarClientes extends Component
     public function render()
     {
         $clientes = Cliente::query()
+            ->withCount('processos')
+            ->when($this->filtroTipo, fn ($q) => $q->where('tipo', $this->filtroTipo))
             ->when($this->busca, fn ($q) => $q->where(function ($sub) {
                 $sub->where('nome', 'like', "%{$this->busca}%")
                     ->orWhere('email', 'like', "%{$this->busca}%")
-                    ->orWhere('cpf', 'like', "%{$this->busca}%");
+                    ->orWhere('cpf', 'like', "%{$this->busca}%")
+                    ->orWhere('cnpj', 'like', "%{$this->busca}%");
             }))
             ->orderBy('nome')
             ->get();
 
-        $processos = $this->clienteId
-            ? Processo::where('cliente_id', $this->clienteId)->orderByDesc('ultima_atualizacao')->get()
+        // LAZY: só carrega os processos do cliente quando a aba "processos" está ativa
+        // (cap de 300 para o modal não pesar em prospecções com muitos processos).
+        $processos = ($this->clienteId && $this->abaAtiva === 'processos')
+            ? Processo::where('cliente_id', $this->clienteId)
+                ->orderByDesc('ultima_atualizacao')
+                ->limit(300)
+                ->get()
             : collect();
 
         $chavesGemini = ChaveGemini::orderBy('apelido')->get();
 
-        $processosDisponiveis = Processo::whereNull('cliente_id')
-            ->orderBy('numero')
-            ->get();
+        // Só carrega a lista de processos disponíveis quando estiver no modo "vincular".
+        $processosDisponiveis = $this->modoVincular
+            ? Processo::whereNull('cliente_id')->orderBy('numero')->limit(300)->get()
+            : collect();
 
         return view('livewire.clientes.gerenciar-clientes', compact(
             'clientes',
