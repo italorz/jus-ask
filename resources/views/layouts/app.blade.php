@@ -113,6 +113,28 @@
             0%   { top: 32px; left: 32px; width: 0; height: 0; opacity: 1; }
             100% { top: 0; left: 0; width: 64px; height: 64px; opacity: 0; }
         }
+
+        /* ===== Paginação no tema escuro ===== */
+        [data-theme="dark"] .page-link {
+            background-color: var(--bg-surface);
+            border-color: var(--border);
+            color: var(--text);
+        }
+        [data-theme="dark"] .page-link:hover {
+            background-color: var(--bg-body);
+            border-color: var(--border);
+            color: var(--text);
+        }
+        [data-theme="dark"] .page-item.active .page-link {
+            background-color: var(--accent);
+            border-color: var(--accent);
+            color: #1c2b3a;
+        }
+        [data-theme="dark"] .page-item.disabled .page-link {
+            background-color: var(--bg-surface);
+            border-color: var(--border);
+            color: var(--text-muted);
+        }
     </style>
 </head>
 <body>

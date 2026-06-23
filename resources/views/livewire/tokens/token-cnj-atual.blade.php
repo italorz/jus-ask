@@ -35,7 +35,7 @@
                         <span class="{{ $expirado ? 'text-danger' : 'text-success' }} fw-semibold">
                             Expira em {{ $expiraEm }}
                         </span>
-                        <small class="text-muted">(validade de 7h a partir do cadastro)</small>
+                        <small class="text-muted">(validade real do token)</small>
                     </div>
                 @endif
             </div>

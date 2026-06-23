@@ -25,7 +25,9 @@ class ProcessoApiService
 
     static function limparNumero(string $numero): string
     {
-        return preg_replace('/[.\\/\-]/', '', $numero);
+        // Mantém só os dígitos (ex.: "1038079-15.2024.8.26.0576" -> "10380791520248260576"),
+        // garantindo a mesma URL que o PDPJ aceita: ?numeroProcesso=<somente dígitos>.
+        return preg_replace('/\D+/', '', $numero) ?? '';
     }
 
     static function resolverToken(?string $tenant = null): string
