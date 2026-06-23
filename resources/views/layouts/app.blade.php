@@ -94,6 +94,25 @@
             .app-shell.sidebar-open .app-sidebar { transform: translateX(0); }
             .app-shell.sidebar-open .sidebar-backdrop { display: block; }
         }
+
+        /* ===== Loading global (ondas/ripple) ===== */
+        .global-loading {
+            position: fixed; inset: 0; z-index: 2000;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(0, 0, 0, .12);
+        }
+        .global-loading.show { display: flex; }
+        .wave-loader { position: relative; width: 72px; height: 72px; }
+        .wave-loader div {
+            position: absolute; border: 4px solid var(--accent, #0d6efd);
+            opacity: 1; border-radius: 50%;
+            animation: waveRipple 1.2s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+        }
+        .wave-loader div:nth-child(2) { animation-delay: -0.6s; }
+        @keyframes waveRipple {
+            0%   { top: 32px; left: 32px; width: 0; height: 0; opacity: 1; }
+            100% { top: 0; left: 0; width: 64px; height: 64px; opacity: 0; }
+        }
     </style>
 </head>
 <body>
@@ -287,7 +306,30 @@
         })();
     </script>
 
+    {{-- Overlay de loading global (ondas) --}}
+    <div id="global-loading" class="global-loading" aria-hidden="true">
+        <div class="wave-loader"><div></div><div></div></div>
+    </div>
+
     @livewireScripts
+
+    <script>
+        // Mostra o loader em ondas sempre que uma ação do Livewire demorar (> 250ms),
+        // para o usuário saber que precisa aguardar. Some assim que a resposta chega.
+        document.addEventListener('livewire:init', () => {
+            const overlay = document.getElementById('global-loading');
+            if (!overlay) return;
+
+            Livewire.hook('commit', ({ respond }) => {
+                const timer = setTimeout(() => overlay.classList.add('show'), 250);
+                respond(() => {
+                    clearTimeout(timer);
+                    overlay.classList.remove('show');
+                });
+            });
+        });
+    </script>
+
     @stack('scripts')
 </body>
 </html>
