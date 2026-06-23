@@ -67,7 +67,7 @@ class McpController extends Controller
 
         try {
             // Consulta com o token CNJ da empresa dona deste token MCP.
-            $resultado = $service->consultarPorCnpj($cnpj, $mcpToken->tenant);
+            $resultado = McpProcessoService::consultar($cnpj, $mcpToken->tenant);
 
             $mcpToken->update(['last_used_at' => now()]);
 
