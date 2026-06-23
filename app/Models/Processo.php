@@ -28,6 +28,10 @@ class Processo extends Model
         'assunto',
         'tribunal',
         'classe',
+        'situacao',
+        'ultimo_movimento_codigo',
+        'ultimo_movimento',
+        'ultimo_movimento_em',
     ];
 
     protected function casts(): array

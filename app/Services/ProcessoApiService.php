@@ -13,14 +13,21 @@ class ProcessoApiService
 {
     private const API_URL = 'https://portaldeservicos.pdpj.jus.br/api/v2/processos?numeroProcesso=';
 
+    /**
+     * Códigos CNJ/TPU de ENCERRAMENTO (último movimento) que indicam processo concluído.
+     */
+    private const CODIGOS_ENCERRAMENTO = [
+        22 => 'Baixa Definitiva',
+        246 => 'Arquivado Definitivamente',
+        848 => 'Trânsito em Julgado',
+        849 => 'Trânsito em Julgado',
+    ];
+
     static function limparNumero(string $numero): string
     {
         return preg_replace('/[.\\/\-]/', '', $numero);
     }
 
-    /**
-     * Resolve o token CNJ da empresa (tenant), com fallback no .env.
-     */
     static function resolverToken(?string $tenant = null): string
     {
         $raw = TokenCnj::query()->where('tenant', $tenant)->latest()->value('token')
@@ -29,9 +36,6 @@ class ProcessoApiService
         return trim(str_replace('Bearer ', '', (string) $raw));
     }
 
-    /**
-     * Consulta o PDPJ pelo número do processo. Retorna o JSON ou null.
-     */
     static function consultarApi(?string $processo = null, ?string $tenant = null): ?array
     {
         if (empty($processo)) {
@@ -80,7 +84,45 @@ class ProcessoApiService
     }
 
     /**
-     * Consulta e grava um snapshot (uso no cadastro). Retorna true se sincronizou.
+     * Cadastra/atualiza um processo PELO NÚMERO, sempre considerando o tenant:
+     * se o número já existir no tenant, atualiza; senão, cria. Em seguida consulta o
+     * PDPJ e define ativo conforme a situação (concluído → inativo; em andamento → ativo).
+     *
+     * @return array{processo: Processo, novo: bool, sincronizado: bool}
+     */
+    static function registrarPorNumero(string $numero, string $tenant, int $empresaId, ?int $clienteId = null): array
+    {
+        $numeroLimpo = self::limparNumero($numero);
+
+        $processo = Processo::withoutGlobalScopes()
+            ->where('tenant', $tenant)
+            ->whereRaw("regexp_replace(numero, '\\D', '', 'g') = ?", [$numeroLimpo])
+            ->first();
+
+        $novo = false;
+
+        if (! $processo) {
+            $novo = true;
+            $processo = Processo::withoutGlobalScopes()->create([
+                'tenant' => $tenant,
+                'empresa_id' => $empresaId,
+                'cliente_id' => $clienteId,
+                'numero' => $numero,
+                'ativo' => true,
+            ]);
+        } elseif ($clienteId && empty($processo->cliente_id)) {
+            // vincula ao cliente informado se ainda não tinha
+            $processo->update(['cliente_id' => $clienteId]);
+        }
+
+        $sincronizado = self::consultarESalvar($processo);
+
+        return ['processo' => $processo->refresh(), 'novo' => $novo, 'sincronizado' => $sincronizado];
+    }
+
+    /**
+     * Consulta e grava um snapshot (uso no CADASTRO por número): define o "ativo"
+     * conforme a análise do último movimento. Retorna true se sincronizou.
      */
     static function consultarESalvar(Processo $processo): bool
     {
@@ -90,16 +132,11 @@ class ProcessoApiService
             return false;
         }
 
-        self::persistirSnapshot($processo, $json);
+        self::persistirSnapshot($processo, $json, definirAtivo: true);
 
         return true;
     }
 
-    /**
-     * Consulta e só grava/notifica quando a API traz mais dados que o último snapshot.
-     *
-     * @return array{atualizado: bool, tamanho_anterior: int, tamanho_novo: int}
-     */
     static function sincronizarComVerificacao(Processo $processo): array
     {
         $json = self::consultarApi($processo->numero, $processo->tenant);
@@ -115,7 +152,6 @@ class ProcessoApiService
             ->latest()
             ->first();
 
-        // Primeira verificação: grava a linha de base sem notificar.
         if ($ultimo === null) {
             self::persistirSnapshot($processo, $json);
 
@@ -124,7 +160,6 @@ class ProcessoApiService
 
         $tamanhoAtual = strlen(json_encode($ultimo->conteudo_json));
 
-        // Sem dados novos: nada a fazer.
         if ($tamanhoNovo <= $tamanhoAtual) {
             return ['atualizado' => false, 'tamanho_anterior' => $tamanhoAtual, 'tamanho_novo' => $tamanhoNovo];
         }
@@ -135,12 +170,6 @@ class ProcessoApiService
         return ['atualizado' => true, 'tamanho_anterior' => $tamanhoAtual, 'tamanho_novo' => $tamanhoNovo];
     }
 
-    /**
-     * Verifica todos os processos ativos (de todas as empresas) e notifica os que
-     * tiverem novidade. Cada processo resolve o token pelo seu próprio tenant.
-     *
-     * @return int Quantidade de processos que geraram notificação.
-     */
     static function verificarProcessosAtivos(): int
     {
         $processos = Processo::withoutGlobalScopes()
@@ -168,9 +197,18 @@ class ProcessoApiService
     }
 
     /**
-     * Espelha campos no processo e grava um novo snapshot em processos_conteudos.
+     * Deriva a situação (concluido | em_andamento) a partir do código do último movimento.
      */
-    static function persistirSnapshot(Processo $processo, array $json): void
+    static function situacaoPorMovimento(?int $codigo): string
+    {
+        return $codigo !== null && isset(self::CODIGOS_ENCERRAMENTO[$codigo]) ? 'concluido' : 'em_andamento';
+    }
+
+    /**
+     * Espelha campos no processo e grava um snapshot. Quando $definirAtivo=true (cadastro
+     * por número), o "ativo" é definido pela situação: concluído → inativo; andamento → ativo.
+     */
+    static function persistirSnapshot(Processo $processo, array $json, bool $definirAtivo = false): void
     {
         $content = $json['content'][0];
         $tram    = $content['tramitacoes'][0];
@@ -180,14 +218,32 @@ class ProcessoApiService
         $dataUltimoMovimento    = isset($tram['ultimoMovimento']['dataHora']) ? Carbon::parse($tram['ultimoMovimento']['dataHora']) : null;
         $valorAcao              = $tram['valorAcao'] ?? null;
         $assunto                = $tram['assunto'][0]['descricao'] ?? null;
+        $tribunal               = $tram['tribunal']['sigla'] ?? ($content['siglaTribunal'] ?? null);
+        $classe                 = $tram['classe'][0]['descricao'] ?? null;
 
-        $processo->update([
+        $movCodigo    = $tram['ultimoMovimento']['codigo'] ?? null;
+        $movDescricao = $tram['ultimoMovimento']['descricao'] ?? null;
+        $situacao     = self::situacaoPorMovimento($movCodigo !== null ? (int) $movCodigo : null);
+
+        $dados = [
             'data_hora_ajuizamento'         => $dataAjuizamento,
             'valor_acao'                    => $valorAcao,
             'data_hora_ultima_distribuicao' => $dataUltimaDistribuicao,
             'assunto'                       => $assunto,
+            'tribunal'                      => $tribunal,
+            'classe'                        => $classe,
+            'situacao'                      => $situacao,
+            'ultimo_movimento_codigo'       => $movCodigo,
+            'ultimo_movimento'              => $movCodigo ? trim($movCodigo . ' - ' . $movDescricao) : $movDescricao,
+            'ultimo_movimento_em'           => $dataUltimoMovimento,
             'ultima_atualizacao'            => $dataUltimoMovimento,
-        ]);
+        ];
+
+        if ($definirAtivo) {
+            $dados['ativo'] = $situacao === 'em_andamento';
+        }
+
+        $processo->update($dados);
 
         ProcessoConteudo::create([
             'processo_id'                   => $processo->id,

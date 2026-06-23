@@ -28,6 +28,7 @@ class GerenciarClientes extends Component
     public string $cidade    = '';
     public string $estado    = '';
     public string $cep       = '';
+    public string $tipo      = 'cliente'; // funil: prospeccao | prospectado | cliente
 
     // Campos do processo (form interno)
     public bool   $mostrarFormProcesso      = false;
@@ -61,16 +62,18 @@ class GerenciarClientes extends Component
 
         return [
             'nome'     => ['required', 'string', 'max:255'],
+            'tipo'     => ['required', 'in:cliente,prospectado,prospeccao'],
+            // telefone/email/cpf são opcionais (clientes de prospecção por CNPJ não têm).
             'telefone' => [
-                'required', 'string', 'max:20',
+                'nullable', 'string', 'max:20',
                 Rule::unique('clientes', 'telefone')->where('tenant', $tenant)->ignore($this->clienteId),
             ],
             'email'    => [
-                'required', 'email', 'max:255',
+                'nullable', 'email', 'max:255',
                 Rule::unique('clientes', 'email')->where('tenant', $tenant)->ignore($this->clienteId),
             ],
             'cpf'      => [
-                'required', 'string', 'max:20',
+                'nullable', 'string', 'max:20',
                 Rule::unique('clientes', 'cpf')->where('tenant', $tenant)->ignore($this->clienteId),
             ],
             'endereco' => ['nullable', 'string', 'max:255'],
@@ -107,10 +110,11 @@ class GerenciarClientes extends Component
         $cliente = Cliente::findOrFail($id);
 
         $this->clienteId      = $cliente->id;
-        $this->nome           = $cliente->nome;
+        $this->nome           = (string) $cliente->nome;
+        $this->tipo           = $cliente->tipo ?? 'cliente';
         $this->telefone       = (string) $cliente->telefone;
-        $this->email          = $cliente->email;
-        $this->cpf            = $cliente->cpf;
+        $this->email          = (string) $cliente->email;
+        $this->cpf            = (string) $cliente->cpf;
         $this->endereco       = (string) $cliente->endereco;
         $this->numero         = (string) $cliente->numero;
         $this->bairro         = (string) $cliente->bairro;
@@ -145,6 +149,13 @@ class GerenciarClientes extends Component
                 'cep'      => 'CEP',
             ]
         );
+
+        // Campos com unique (tenant, col): vazio vira NULL para não colidir.
+        foreach (['telefone', 'email', 'cpf'] as $campo) {
+            if (($dados[$campo] ?? '') === '') {
+                $dados[$campo] = null;
+            }
+        }
 
         if ($this->clienteId) {
             Cliente::findOrFail($this->clienteId)->update($dados);
@@ -223,12 +234,17 @@ class GerenciarClientes extends Component
             Processo::findOrFail($this->processoId)->update($dados);
             session()->flash('status', 'Processo atualizado.');
         } else {
-            $processo    = Processo::create($dados);
-            $sincronizado = app(ProcessoApiService::class)->consultarESalvar($processo);
-            if ($sincronizado) {
-                session()->flash('status', 'Processo cadastrado e sincronizado com a API.');
+            // Cadastro POR NÚMERO: upsert por tenant+número + ativo pela análise do
+            // último movimento (concluído → inativo; em andamento → ativo).
+            $tm = app(TenantManager::class);
+            $res = ProcessoApiService::registrarPorNumero($this->processoNumero, $tm->tenant(), $tm->id(), $this->clienteId);
+
+            if ($res['sincronizado']) {
+                $situacao = $res['processo']->situacao === 'concluido' ? 'concluído (inativo)' : 'em andamento (ativo)';
+                session()->flash('status', ($res['novo'] ? 'Processo cadastrado' : 'Processo já existia e foi atualizado')
+                    . " e sincronizado — {$situacao}.");
             } else {
-                session()->flash('warning', 'Processo cadastrado. Não foi possível sincronizar com a API.');
+                session()->flash('warning', 'Processo salvo. Não foi possível sincronizar com a API (PDPJ).');
             }
         }
 
@@ -294,7 +310,7 @@ class GerenciarClientes extends Component
     {
         $this->reset([
             'clienteId', 'criandoNovo',
-            'nome', 'telefone', 'email', 'cpf',
+            'nome', 'tipo', 'telefone', 'email', 'cpf',
             'endereco', 'numero', 'bairro', 'cidade', 'estado', 'cep',
             'chaveGeminiId',
         ]);

@@ -314,6 +314,8 @@ class McpProcessoService
             'tenant' => $tenant,
             'cnpj' => $cnpj,
             'nome' => $nome ?: ('CNPJ ' . self::formatarCnpj($cnpj)),
+            // consulta por CNPJ entra no funil como "prospecção" (só monitorando).
+            'tipo' => 'prospeccao',
             // email/cpf/telefone têm unique (tenant, col); como o cliente é uma
             // empresa (CNPJ), ficam NULL (no Postgres, múltiplos NULL não colidem).
             'email' => null,

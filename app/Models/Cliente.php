@@ -20,6 +20,7 @@ class Cliente extends Model
         'email',
         'cpf',
         'cnpj',
+        'tipo',
         'endereco',
         'numero',
         'bairro',

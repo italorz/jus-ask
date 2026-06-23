@@ -73,15 +73,17 @@ class GerenciarProcessos extends Component
             Processo::findOrFail($this->processoId)->update($dados);
             session()->flash('status', 'Processo atualizado.');
         } else {
-            $processo = Processo::create($dados);
+            // Cadastro POR NÚMERO: upsert por tenant+número e ativo definido pela
+            // análise do último movimento (concluído → inativo; em andamento → ativo).
+            $tm = app(TenantManager::class);
+            $res = ProcessoApiService::registrarPorNumero($this->numero, $tm->tenant(), $tm->id(), $this->clienteId);
 
-            // Cadastro grava a linha de base sem notificar.
-            $sincronizado = ProcessoApiService::consultarESalvar($processo);
-
-            if ($sincronizado) {
-                session()->flash('status', 'Processo cadastrado e sincronizado com a API.');
+            if ($res['sincronizado']) {
+                $situacao = $res['processo']->situacao === 'concluido' ? 'concluído (inativo)' : 'em andamento (ativo)';
+                session()->flash('status', ($res['novo'] ? 'Processo cadastrado' : 'Processo já existia e foi atualizado')
+                    . " e sincronizado — {$situacao}.");
             } else {
-                session()->flash('warning', 'Processo cadastrado. Não foi possível sincronizar com a API.');
+                session()->flash('warning', 'Processo salvo. Não foi possível sincronizar com a API (PDPJ).');
             }
         }
 
