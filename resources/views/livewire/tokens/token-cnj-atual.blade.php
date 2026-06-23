@@ -26,6 +26,18 @@
                 @if ($criadoEm)
                     <div class="form-text">Cadastrado em {{ $criadoEm }}.</div>
                 @endif
+
+                @if ($expiraEm)
+                    <div class="mt-3 d-flex align-items-center gap-2 flex-wrap">
+                        <span class="badge bg-{{ $expirado ? 'danger' : 'success' }} fs-6">
+                            {{ $expirado ? 'EXPIRADO' : 'VÁLIDO' }}
+                        </span>
+                        <span class="{{ $expirado ? 'text-danger' : 'text-success' }} fw-semibold">
+                            Expira em {{ $expiraEm }}
+                        </span>
+                        <small class="text-muted">(validade de 7h a partir do cadastro)</small>
+                    </div>
+                @endif
             </div>
         </div>
 

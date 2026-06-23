@@ -14,6 +14,13 @@ class TokenCnjAtual extends Component
 
     public ?string $criadoEm = null;
 
+    public ?string $expiraEm = null;
+
+    public bool $expirado = false;
+
+    /** Validade do token CNJ em horas a partir da criação (informativo). */
+    private const HORAS_VALIDADE = 7;
+
     public function mount()
     {
         $tm = app(TenantManager::class);
@@ -34,7 +41,18 @@ class TokenCnjAtual extends Component
         $registro = TokenCnj::where('tenant', $this->tenant)->latest()->first();
 
         $this->token = $registro?->token;
-        $this->criadoEm = $registro?->created_at?->format('d/m/Y H:i');
+        $this->criadoEm = null;
+        $this->expiraEm = null;
+        $this->expirado = false;
+
+        if ($registro?->created_at) {
+            $criado = $registro->created_at;
+            $expira = $criado->copy()->addHours(self::HORAS_VALIDADE);
+
+            $this->criadoEm = $criado->format('d/m/Y H:i');
+            $this->expiraEm = $expira->format('d/m/Y H:i');
+            $this->expirado = now()->greaterThan($expira);
+        }
     }
 
     public function render()
