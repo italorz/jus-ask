@@ -2,9 +2,11 @@
 
 namespace App\Services;
 
+use App\Models\Empresa;
 use App\Models\Notificacao;
 use App\Models\Processo;
 use App\Models\ProcessoConteudo;
+use App\Models\ProcessoContato;
 use App\Models\TokenCnj;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
@@ -168,8 +170,51 @@ class ProcessoApiService
 
         self::persistirSnapshot($processo, $json);
         self::criarNotificacao($processo, $tamanhoAtual, $tamanhoNovo);
+        self::notificarWhatsapp($processo);
 
         return ['atualizado' => true, 'tamanho_anterior' => $tamanhoAtual, 'tamanho_novo' => $tamanhoNovo];
+    }
+
+    /**
+     * Notificação por WhatsApp (Evolution API) ao(s) número(s) de contato do processo.
+     * Funciona apenas como NOTIFICAÇÃO e é global (uma instância Evolution, sem vínculo
+     * de tenant). O link aponta para o WhatsApp do advogado/firma dono do processo.
+     */
+    static function notificarWhatsapp(Processo $processo): void
+    {
+        try {
+            $numeros = ProcessoContato::withoutGlobalScopes()
+                ->where('processo_id', $processo->id)
+                ->where('tipo', 'telefone')
+                ->pluck('valor')
+                ->filter()
+                ->unique();
+
+            if ($numeros->isEmpty()) {
+                return;
+            }
+
+            $whatsAdvogado = Empresa::where('id', $processo->empresa_id)->value('whatsapp');
+            $linkAdvogado = $whatsAdvogado
+                ? 'https://wa.me/' . preg_replace('/\D+/', '', (string) $whatsAdvogado)
+                : null;
+
+            $mensagem = "Oba! 🎉 Seu processo {$processo->numero} foi atualizado.\n\n"
+                . ($linkAdvogado
+                    ? "Entre em contato com o seu advogado responsável: {$linkAdvogado}"
+                    : 'Entre em contato com o seu advogado responsável.');
+
+            $whatsapp = app(\App\Services\EvolutionWhatsappService::class);
+
+            foreach ($numeros as $numero) {
+                $whatsapp->enviarTexto((string) $numero, $mensagem);
+            }
+        } catch (\Throwable $e) {
+            logger()->warning('Notificação WhatsApp falhou', [
+                'processo_id' => $processo->id,
+                'erro' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**

@@ -15,6 +15,7 @@ class Empresa extends Model
         'nome',
         'cnpj',
         'oab',
+        'whatsapp',
         'tenant',
         'is_pessoa_fisica',
     ];
