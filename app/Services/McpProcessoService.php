@@ -102,6 +102,93 @@ class McpProcessoService
         return $st;
     }
 
+    /**
+     * Consulta os processos no CNJ pelo CPF/CNPJ de um CLIENTE específico e salva
+     * vinculados a ele (ativo=false; upsert: se o número já existe no tenant, não duplica).
+     *
+     * @return array<string, mixed>  status (processing/done) da coleta
+     */
+    public static function consultarParaCliente(int $clienteId, string $tenant, bool $atualizar = false): array
+    {
+        $cliente = Cliente::withoutGlobalScopes()->where('tenant', $tenant)->findOrFail($clienteId);
+        $doc = self::limparDocumento((string) ($cliente->cnpj ?: $cliente->cpf));
+        $key = self::statusKey($doc, $tenant);
+
+        if (! $atualizar && ($cache = Cache::get($key)) && ($cache['status'] ?? '') === 'processing') {
+            return $cache;
+        }
+
+        $token = self::tokenPara($tenant);
+        if (empty($token)) {
+            throw new \RuntimeException('Nenhum token CNJ está cadastrado para consultar o PDPJ.');
+        }
+
+        $empresaId = self::empresaIdDoTenant($tenant);
+        if (empty($empresaId)) {
+            throw new \RuntimeException("Empresa (tenant) '{$tenant}' não encontrada.");
+        }
+
+        $primeira = self::buscarPagina($doc, $token, null);
+        $total = (int) ($primeira['total'] ?? count($primeira['content'] ?? []));
+        Cache::forget(self::cancelKey($doc, $tenant));
+
+        // Pequeno: coleta e salva agora.
+        if ($total <= self::MAX_PAGINAS_SYNC * 100) {
+            $res = self::coletarESalvar($doc, $tenant, $token, $primeira, self::MAX_PAGINAS_TOTAL, $clienteId, $empresaId, $key);
+            $st = self::montarStatus(! empty($res['cancelado']) ? 'cancelado' : 'done', $doc, $tenant, $clienteId, $total, $res['coletados'], $res['paginas']);
+            Cache::put($key, $st, now()->addMinutes(60));
+
+            return $st;
+        }
+
+        // Grande: segundo plano.
+        $st = self::montarStatus('processing', $doc, $tenant, $clienteId, $total, 0, 0);
+        $minutos = max(1, (int) ceil($total / 100 * 6 / 60));
+        $st['mensagem'] = "Consulta grande: {$total} processos. Coletando em segundo plano (~{$minutos} min).";
+        Cache::put($key, $st, now()->addMinutes(30));
+        ConsultarProcessosCnpjJob::dispatch($doc, $tenant, $clienteId);
+
+        return $st;
+    }
+
+    /** Versão do coletarCompleto que vincula a um cliente já existente (usada pelo Job). */
+    public static function coletarCompletoParaCliente(string $documento, string $tenant, int $clienteId): array
+    {
+        $doc = self::limparDocumento($documento);
+        $key = self::statusKey($doc, $tenant);
+
+        $token = self::tokenPara($tenant);
+        if (empty($token)) {
+            throw new \RuntimeException('Nenhum token CNJ está cadastrado para consultar o PDPJ.');
+        }
+
+        $empresaId = self::empresaIdDoTenant($tenant);
+        if (empty($empresaId)) {
+            throw new \RuntimeException("Empresa (tenant) '{$tenant}' não encontrada.");
+        }
+
+        $primeira = self::buscarPagina($doc, $token, null);
+        $total = (int) ($primeira['total'] ?? count($primeira['content'] ?? []));
+
+        $res = self::coletarESalvar($doc, $tenant, $token, $primeira, self::MAX_PAGINAS_TOTAL, $clienteId, $empresaId, $key);
+        $st = self::montarStatus(! empty($res['cancelado']) ? 'cancelado' : 'done', $doc, $tenant, $clienteId, $total, $res['coletados'], $res['paginas']);
+        Cache::put($key, $st, now()->addMinutes(60));
+
+        return $st;
+    }
+
+    /** CPF (11) ou CNPJ (14) — só dígitos. */
+    private static function limparDocumento(string $doc): string
+    {
+        $d = preg_replace('/\D+/', '', $doc) ?? '';
+
+        if (! in_array(strlen($d), [11, 14], true)) {
+            throw new \InvalidArgumentException('O cliente não tem CPF (11 dígitos) ou CNPJ (14 dígitos) válido para consultar.');
+        }
+
+        return $d;
+    }
+
     /** Marca a consulta para cancelamento (o job para no próximo lote, mantendo o que já salvou). */
     public static function cancelar(string $cnpj, string $tenant): array
     {

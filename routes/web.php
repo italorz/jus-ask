@@ -10,6 +10,7 @@ use App\Http\Controllers\WhatsappWebhookController;
 use App\Livewire\Admin\ListaEmpresas;
 use App\Livewire\Chat\ChatPublico;
 use App\Livewire\ChavesGemini\GerenciarChavesGemini;
+use App\Livewire\Clientes\EditarCliente;
 use App\Livewire\Clientes\GerenciarClientes;
 use App\Livewire\Notificacoes\GerenciarNotificacoes;
 use App\Livewire\Crm\Kanban;
@@ -89,6 +90,8 @@ Route::middleware('auth')->group(function () {
     // Painel da empresa (com tenant).
     Route::prefix('{tenant}')->group(function () {
         Route::get('/clientes', GerenciarClientes::class)->name('clientes');
+        Route::get('/clientes/novo', EditarCliente::class)->name('clientes.novo');
+        Route::get('/clientes/{cliente}/editar', EditarCliente::class)->name('clientes.editar');
         Route::get('/processos', GerenciarProcessos::class)->name('processos');
         Route::get('/graficos', GraficosProcessos::class)->name('graficos');
         Route::get('/crm', Kanban::class)->name('crm');

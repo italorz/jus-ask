@@ -27,13 +27,18 @@ class ConsultarProcessosCnpjJob implements ShouldQueue
     public function __construct(
         public string $cnpj,
         public ?string $tenant = null,
+        public ?int $clienteId = null,
     ) {
     }
 
     public function handle(): void
     {
         try {
-            McpProcessoService::coletarCompleto($this->cnpj, (string) $this->tenant);
+            if ($this->clienteId) {
+                McpProcessoService::coletarCompletoParaCliente($this->cnpj, (string) $this->tenant, $this->clienteId);
+            } else {
+                McpProcessoService::coletarCompleto($this->cnpj, (string) $this->tenant);
+            }
         } catch (\Throwable $e) {
             Cache::put(
                 McpProcessoService::statusKey($this->cnpj, $this->tenant),

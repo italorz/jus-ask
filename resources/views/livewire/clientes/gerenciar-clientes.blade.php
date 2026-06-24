@@ -2,13 +2,9 @@
     {{-- Cabeçalho da página --}}
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h1 class="h3 mb-0">Clientes</h1>
-        <button class="btn btn-primary" wire:click="novo">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-person-plus-fill me-1 mb-1" viewBox="0 0 16 16">
-                <path d="M1 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6"/>
-                <path fill-rule="evenodd" d="M13.5 5a.5.5 0 0 1 .5.5V7h1.5a.5.5 0 0 1 0 1H14v1.5a.5.5 0 0 1-1 0V8h-1.5a.5.5 0 0 1 0-1H13V5.5a.5.5 0 0 1 .5-.5"/>
-            </svg>
-            Novo cliente
-        </button>
+        <a class="btn btn-primary" href="{{ route('clientes.novo', ['tenant' => app(\App\Services\TenantManager::class)->tenant()]) }}">
+            <i class="bi bi-person-plus me-1"></i> Novo cliente
+        </a>
     </div>
 
     @if (session('status'))
@@ -490,8 +486,8 @@
                                 <span class="badge bg-secondary">{{ $cliente->processos_count }}</span>
                             </td>
                             <td class="text-end">
-                                <button class="btn btn-sm btn-outline-primary"
-                                        wire:click="editar({{ $cliente->id }})">Editar</button>
+                                <a class="btn btn-sm btn-outline-primary"
+                                   href="{{ route('clientes.editar', ['tenant' => app(\App\Services\TenantManager::class)->tenant(), 'cliente' => $cliente->id]) }}">Editar</a>
                                 <button class="btn btn-sm btn-outline-danger"
                                         wire:click="excluir({{ $cliente->id }})"
                                         wire:confirm="Remover este cliente e seus processos?">Excluir</button>
@@ -506,6 +502,9 @@
                     @endforelse
                 </tbody>
             </table>
+            @if ($clientes->hasPages())
+                <div class="card-footer">{{ $clientes->links('pagination::bootstrap-5') }}</div>
+            @endif
         </div>
     </div>
 

@@ -237,6 +237,20 @@ class ProcessoApiService
         return ['ok' => true, 'processo' => $processo->refresh()];
     }
 
+    /**
+     * Ativa um processo para monitoramento: antes, faz uma consulta ao CNJ POR NÚMERO
+     * para pegar o estado mais atualizado; depois marca ativo=true.
+     *
+     * @return array{ok: bool, processo?: Processo}
+     */
+    static function ativar(Processo $processo): array
+    {
+        $res = self::sincronizarForcado($processo); // pega o mais atualizado por número
+        $processo->update(['ativo' => true]);
+
+        return ['ok' => $res['ok'] ?? false, 'processo' => $processo->refresh()];
+    }
+
     static function verificarProcessosAtivos(): int
     {
         $processos = Processo::withoutGlobalScopes()

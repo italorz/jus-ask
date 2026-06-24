@@ -9,9 +9,12 @@ use App\Services\ProcessoApiService;
 use App\Services\TenantManager;
 use Illuminate\Validation\Rule;
 use Livewire\Component;
+use Livewire\WithPagination;
 
 class GerenciarClientes extends Component
 {
+    use WithPagination;
+
     public ?int  $clienteId    = null;
     public bool  $criandoNovo  = false;   // true enquanto cria (wizard); false ao editar (abas livres)
     public string $busca       = '';
@@ -51,6 +54,16 @@ class GerenciarClientes extends Component
         if (! app(TenantManager::class)->check()) {
             redirect()->route('home');
         }
+    }
+
+    public function updatedBusca(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedFiltroTipo(): void
+    {
+        $this->resetPage();
     }
 
     // ─────────────────────────────────────────────
@@ -349,7 +362,7 @@ class GerenciarClientes extends Component
                     ->orWhere('cnpj', 'like', "%{$this->busca}%");
             }))
             ->orderBy('nome')
-            ->get();
+            ->paginate(15);
 
         // LAZY: só carrega os processos do cliente quando a aba "processos" está ativa
         // (cap de 300 para o modal não pesar em prospecções com muitos processos).
