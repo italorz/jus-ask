@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ChaveGemini;
 use App\Models\Cliente;
 use App\Models\Processo;
+use App\Models\ProcessoCliente;
 use App\Models\ProcessoConteudo;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
@@ -12,7 +13,7 @@ use Illuminate\Support\Facades\Http;
 class GeminiService
 {
 
-    private const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite';
+    private const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash';
 
     // ─────────────────────────────────────────────────────────────────────
     // System Prompt
@@ -28,9 +29,18 @@ class GeminiService
             ->where('empresa_id', $empresaId)
             ->findOrFail($clienteId);
 
-        $processos = Processo::withoutGlobalScopes()
+        // Inclui processos vinculados diretamente (cliente_id) E via ProcessoCliente (many-to-many)
+        $vinculadosIds = ProcessoCliente::withoutGlobalScopes()
             ->where('empresa_id', $empresaId)
             ->where('cliente_id', $clienteId)
+            ->pluck('processo_id');
+
+        $processos = Processo::withoutGlobalScopes()
+            ->where('empresa_id', $empresaId)
+            ->where(function ($q) use ($clienteId, $vinculadosIds) {
+                $q->where('cliente_id', $clienteId)
+                  ->orWhereIn('id', $vinculadosIds);
+            })
             ->get();
 
         if ($processos->isEmpty()) {
@@ -102,14 +112,15 @@ PROMPT;
 
         $contents[] = ['role' => 'user', 'parts' => [['text' => $userMessage]]];
 
-        $url = self::API_BASE.':generateContent?key='.$apiKey;
+        $url     = self::API_BASE.':generateContent?key='.$apiKey;
+        $payload = [
+            'system_instruction' => ['parts' => [['text' => $systemPrompt]]],
+            'contents'           => $contents,
+            'generationConfig'   => ['thinkingConfig' => ['thinkingBudget' => 0]],
+        ];
 
         try {
-            $response = Http::timeout(30)->post($url, [
-                'system_instruction' => ['parts' => [['text' => $systemPrompt]]],
-                'contents'           => $contents,
-                'generationConfig'   => ['thinkingConfig' => ['thinkingBudget' => 0]],
-            ]);
+            $response = self::chamarComRetry($url, $payload);
 
             if ($response->failed()) {
                 logger()->error('GeminiService: falha na API', [
@@ -165,13 +176,14 @@ PROMPT;
 
         $contents[] = ['role' => 'user', 'parts' => [['text' => $userMessage]]];
 
-        $url = self::API_BASE.':generateContent?key='.$apiKey;
-
-        $response = Http::timeout(30)->post($url, [
+        $url      = self::API_BASE.':generateContent?key='.$apiKey;
+        $payload  = [
             'system_instruction' => ['parts' => [['text' => $systemPrompt]]],
             'contents'           => $contents,
             'generationConfig'   => ['thinkingConfig' => ['thinkingBudget' => 0]],
-        ]);
+        ];
+
+        $response = self::chamarComRetry($url, $payload);
 
         if ($response->failed()) {
             logger()->error('GeminiService: falha na API (responder)', [
@@ -193,6 +205,57 @@ PROMPT;
     // ─────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Faz a chamada à API Gemini com até 3 tentativas para erros 503/429.
+     * Espera 3 s entre tentativas de sobrecarga antes de desistir.
+     */
+    private static function chamarComRetry(string $url, array $payload): \Illuminate\Http\Client\Response
+    {
+        $tentativas = 3;
+
+        for ($i = 1; $i <= $tentativas; $i++) {
+            $response = Http::timeout(45)->post($url, $payload);
+
+            // Sucesso ou erro não-recuperável: retorna imediatamente
+            if ($response->successful() || ! in_array($response->status(), [429, 503], true)) {
+                return $response;
+            }
+
+            if ($i >= $tentativas) {
+                break;
+            }
+
+            // Lê o delay sugerido: header Retry-After ou corpo da resposta
+            $wait = (int) ($response->header('Retry-After') ?: 0);
+
+            if ($wait === 0) {
+                // Tenta extrair do corpo do 429 ("retryDelay": "25s")
+                $details = $response->json('error.details') ?? [];
+                foreach ($details as $d) {
+                    if (isset($d['retryDelay'])) {
+                        $wait = (int) filter_var($d['retryDelay'], FILTER_SANITIZE_NUMBER_INT);
+                        break;
+                    }
+                }
+            }
+
+            // Para cota diária esgotada (delay > 60s), não tem sentido aguardar
+            if ($wait > 60) {
+                logger()->warning('GeminiService: cota diária esgotada, não vai tentar novamente', [
+                    'status'     => $response->status(),
+                    'retryDelay' => $wait,
+                ]);
+                break;
+            }
+
+            $wait = max(3, $wait);
+            logger()->warning('GeminiService: ' . $response->status() . ' — aguardando ' . $wait . 's (tentativa ' . $i . '/' . $tentativas . ')');
+            sleep($wait);
+        }
+
+        return $response;
+    }
 
     /**
      * Resolve a chave da API: primeiro tenta a chave vinculada ao cliente,

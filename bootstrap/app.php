@@ -25,7 +25,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // APIs externas (Evolution API e MCP) não enviam token CSRF.
         $middleware->validateCsrfTokens(except: [
             'mcp/processos',
-            'mcp/jus-ask',
+            'mcp/jusclaude',
             'webhooks/whatsapp',
             '*/webhooks/whatsapp',
         ]);

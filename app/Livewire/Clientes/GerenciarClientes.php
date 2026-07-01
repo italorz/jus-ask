@@ -5,6 +5,7 @@ namespace App\Livewire\Clientes;
 use App\Models\ChaveGemini;
 use App\Models\Cliente;
 use App\Models\Processo;
+use App\Models\ProcessoCliente;
 use App\Services\ProcessoApiService;
 use App\Services\TenantManager;
 use Illuminate\Validation\Rule;
@@ -20,6 +21,12 @@ class GerenciarClientes extends Component
     public string $busca       = '';
     public string $filtroTipo  = '';     // '' | cliente | prospectado | prospeccao
     public string $abaAtiva    = 'dados'; // 'dados' | 'processos' | 'chave'
+
+    // Modal de confirmação de exclusão
+    public ?int  $excluirId              = null;
+    public string $excluirNome           = '';
+    public int   $excluirProcessosCount  = 0;
+    public bool  $excluirTambemProcessos = false;
 
     // Campos do cliente
     public string $nome      = '';
@@ -190,10 +197,43 @@ class GerenciarClientes extends Component
         $this->dispatch('fecharModal');
     }
 
-    public function excluir(int $id): void
+    public function pedirConfirmacao(int $id): void
     {
-        Cliente::findOrFail($id)->delete();
+        $cliente = Cliente::withCount('processos')->findOrFail($id);
+
+        $this->excluirId             = $id;
+        $this->excluirNome           = $cliente->nome;
+        $this->excluirProcessosCount = $cliente->processos_count;
+        $this->excluirTambemProcessos = false;
+
+        $this->dispatch('abrirModalExcluir');
+    }
+
+    public function confirmarExclusao(): void
+    {
+        $cliente = Cliente::findOrFail($this->excluirId);
+
+        if ($this->excluirTambemProcessos) {
+            Processo::where('cliente_id', $this->excluirId)->delete();
+        } else {
+            // Desvincula o cliente dos processos sem removê-los
+            Processo::where('cliente_id', $this->excluirId)->update(['cliente_id' => null]);
+        }
+
+        // Remove todos os vínculos many-to-many independentemente da escolha
+        ProcessoCliente::where('cliente_id', $this->excluirId)->delete();
+
+        $cliente->delete();
+
+        $this->reset(['excluirId', 'excluirNome', 'excluirProcessosCount', 'excluirTambemProcessos']);
+        $this->dispatch('fecharModalExcluir');
         session()->flash('status', 'Cliente removido.');
+    }
+
+    public function cancelarExclusao(): void
+    {
+        $this->reset(['excluirId', 'excluirNome', 'excluirProcessosCount', 'excluirTambemProcessos']);
+        $this->dispatch('fecharModalExcluir');
     }
 
     // ─────────────────────────────────────────────

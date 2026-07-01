@@ -6,9 +6,11 @@ use App\Models\Empresa;
 use App\Models\Notificacao;
 use App\Models\Processo;
 use App\Models\ProcessoConteudo;
+use App\Models\ProcessoCliente;
 use App\Models\ProcessoContato;
 use App\Models\TokenCnj;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 class ProcessoApiService
@@ -32,6 +34,23 @@ class ProcessoApiService
         return preg_replace('/\D+/', '', $numero) ?? '';
     }
 
+    /**
+     * Retorna um cliente HTTP já configurado com proxy (se PDPJ_PROXY_URL estiver definido).
+     * Formato da variável: http://usuario:senha@host:porta  ou  http://host:porta
+     */
+    private static function httpClient(): \Illuminate\Http\Client\PendingRequest
+    {
+        $proxyUrl = env('PDPJ_PROXY_URL');
+
+        $client = Http::timeout(15);
+
+        if ($proxyUrl) {
+            $client = $client->withOptions(['proxy' => $proxyUrl]);
+        }
+
+        return $client;
+    }
+
     static function resolverToken(?string $tenant = null): string
     {
         $raw = TokenCnj::query()->where('tenant', $tenant)->latest()->value('token')
@@ -53,12 +72,43 @@ class ProcessoApiService
         }
 
         $numeroLimpo = self::limparNumero($processo);
+        $tentativas  = 3;
+        $response    = null;
+        $backoffs    = [3, 6];
 
-        $response = Http::timeout(15)
-            ->withToken($token)
-            ->withHeaders(['User-Agent' => 'curl/8.19.0'])
-            ->withoutVerifying()
-            ->get(self::API_URL . $numeroLimpo);
+        try {
+            for ($i = 1; $i <= $tentativas; $i++) {
+                $response = self::httpClient()
+                    ->withToken($token)
+                    ->withHeaders(['User-Agent' => 'curl/8.19.0'])
+                    ->withoutVerifying()
+                    ->get(self::API_URL . $numeroLimpo);
+
+                if ($response->status() !== 429) {
+                    break;
+                }
+
+                // Respeita Retry-After se existir; senão usa backoff curto
+                $wait = (int) ($response->header('Retry-After') ?: ($backoffs[$i - 1] ?? 10));
+                logger()->info('ProcessoApiService: 429 recebido, aguardando antes de tentar novamente', [
+                    'numero'    => $processo,
+                    'tentativa' => $i,
+                    'aguardar'  => $wait,
+                ]);
+
+                if ($i < $tentativas) {
+                    sleep($wait);
+                }
+            }
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            logger()->warning('ProcessoApiService: falha de conexão (proxy ou rede)', [
+                'numero' => $processo,
+                'tenant' => $tenant,
+                'erro'   => $e->getMessage(),
+            ]);
+
+            return null;
+        }
 
         if (! $response->successful()) {
             logger()->warning('ProcessoApiService: resposta não-2xx', [
@@ -183,12 +233,22 @@ class ProcessoApiService
     static function notificarWhatsapp(Processo $processo): void
     {
         try {
-            $numeros = ProcessoContato::withoutGlobalScopes()
+            // Números cadastrados diretamente no processo (legado)
+            $numerosLegado = ProcessoContato::withoutGlobalScopes()
                 ->where('processo_id', $processo->id)
                 ->where('tipo', 'telefone')
-                ->pluck('valor')
-                ->filter()
-                ->unique();
+                ->pluck('valor');
+
+            // Telefones dos clientes vinculados com canal whatsapp/ambos
+            $numerosClientes = ProcessoCliente::withoutGlobalScopes()
+                ->with('cliente')
+                ->where('processo_id', $processo->id)
+                ->whereIn('canal_notificacao', ['whatsapp', 'ambos'])
+                ->get()
+                ->map(fn ($pc) => preg_replace('/\D+/', '', (string) ($pc->cliente?->telefone ?? '')))
+                ->filter();
+
+            $numeros = $numerosLegado->merge($numerosClientes)->filter()->unique();
 
             if ($numeros->isEmpty()) {
                 return;
@@ -253,26 +313,70 @@ class ProcessoApiService
 
     static function verificarProcessosAtivos(): int
     {
-        $processos = Processo::withoutGlobalScopes()
-            ->where('ativo', true)
-            ->get();
+        // Todas as configurações lêem env vars; os defaults são conservadores.
+        $delayMs       = max(1000, (int) env('PDPJ_VERIFY_DELAY_MS',        3000));  // entre processos
+        $pauseApos     = max(1,    (int) env('PDPJ_VERIFY_PAUSA_APOS',        10));  // a cada N processos
+        $pauseMs       = max(5000, (int) env('PDPJ_VERIFY_PAUSA_MS',        20000)); // pausa longa
+        $cooldownHoras = max(1,    (int) env('PDPJ_VERIFY_COOLDOWN_HORAS',      4)); // não reverifica em X h
 
         $atualizados = 0;
+        $verificados = 0;
+        $pulados     = 0;
 
-        foreach ($processos as $processo) {
-            try {
-                if (self::sincronizarComVerificacao($processo)['atualizado']) {
-                    $atualizados++;
+        Processo::withoutGlobalScopes()
+            ->where('ativo', true)
+            ->chunk(50, function ($processos) use (
+                &$atualizados, &$verificados, &$pulados,
+                $delayMs, $pauseApos, $pauseMs, $cooldownHoras
+            ) {
+                foreach ($processos as $processo) {
+                    // Não reverifica processo checado recentemente (cooldown por Redis).
+                    $cooldownKey = 'proc_verificado:' . $processo->id;
+                    if (Cache::has($cooldownKey)) {
+                        $pulados++;
+                        continue;
+                    }
+
+                    // Delay entre processos (com jitter ±500 ms).
+                    if ($verificados > 0) {
+                        $jitter = rand(-500, 500);
+                        usleep(max(1000, $delayMs + $jitter) * 1000);
+                    }
+
+                    // Pausa longa a cada N processos verificados (com jitter ±2 s).
+                    if ($verificados > 0 && $verificados % $pauseApos === 0) {
+                        $jitterLote = rand(-2000, 2000);
+                        usleep(max(5000, $pauseMs + $jitterLote) * 1000);
+                        logger()->info('ProcessoApiService: pausa de lote', [
+                            'verificados_ate_agora' => $verificados,
+                            'pausa_ms'              => $pauseMs,
+                        ]);
+                    }
+
+                    try {
+                        $res = self::sincronizarComVerificacao($processo);
+                        if ($res['atualizado']) {
+                            $atualizados++;
+                        }
+                        Cache::put($cooldownKey, true, now()->addHours($cooldownHoras));
+                    } catch (\Throwable $e) {
+                        logger()->error('ProcessoApiService: falha ao verificar processo', [
+                            'processo_id' => $processo->id,
+                            'numero'      => $processo->numero,
+                            'tenant'      => $processo->tenant,
+                            'erro'        => $e->getMessage(),
+                        ]);
+                    }
+
+                    $verificados++;
                 }
-            } catch (\Throwable $e) {
-                logger()->error('ProcessoApiService: falha ao verificar processo', [
-                    'processo_id' => $processo->id,
-                    'numero'      => $processo->numero,
-                    'tenant'      => $processo->tenant,
-                    'erro'        => $e->getMessage(),
-                ]);
-            }
-        }
+            });
+
+        logger()->info('ProcessoApiService: verificação concluída', [
+            'atualizados'      => $atualizados,
+            'verificados'      => $verificados,
+            'pulados_cooldown' => $pulados,
+        ]);
 
         return $atualizados;
     }

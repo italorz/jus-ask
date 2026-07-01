@@ -7,6 +7,7 @@ use App\Http\Controllers\McpController;
 use App\Http\Controllers\TokenController;
 use App\Http\Controllers\VerificarProcessosController;
 use App\Http\Controllers\WhatsappWebhookController;
+use App\Livewire\Admin\DbExplorer;
 use App\Livewire\Admin\ListaEmpresas;
 use App\Livewire\Chat\ChatPublico;
 use App\Livewire\ChavesGemini\GerenciarChavesGemini;
@@ -67,7 +68,7 @@ Route::get('/blog/{site:slug}', [BlogController::class, 'show'])->name('blog.sho
 Route::get('/blog/{site:slug}/{post:slug}', [BlogController::class, 'post'])->name('blog.post');
 
 // Cadastro de token CNJ via link (com tenant).
-Route::get('/{tenant}/token-cnj/{data}', [TokenController::class, 'telaCnj'])->name('getTokenCnj');
+Route::get('/{tenant}/token-cnj', [TokenController::class, 'telaCnj'])->name('getTokenCnj');
 Route::post('/{tenant}/token-cnj', [TokenController::class, 'store'])->name('postTokenCnj');
 
 /*
@@ -87,12 +88,17 @@ Route::middleware('auth')->group(function () {
         ->middleware('can:super-admin')
         ->name('admin.empresas');
 
+    Route::get('/admin/db', DbExplorer::class)
+        ->middleware('can:super-admin')
+        ->name('admin.db');
+
     // Painel da empresa (com tenant).
     Route::prefix('{tenant}')->group(function () {
         Route::get('/clientes', GerenciarClientes::class)->name('clientes');
         Route::get('/clientes/novo', EditarCliente::class)->name('clientes.novo');
         Route::get('/clientes/{cliente}/editar', EditarCliente::class)->name('clientes.editar');
         Route::get('/processos', GerenciarProcessos::class)->name('processos');
+        Route::get('/processos/novo', DetalheProcesso::class)->name('processos.novo');
         Route::get('/graficos', GraficosProcessos::class)->name('graficos');
         Route::get('/crm', Kanban::class)->name('crm');
         Route::get('/processos/{processo}', DetalheProcesso::class)->name('processos.detalhe');

@@ -36,7 +36,7 @@
         @else
             <ul class="list-group list-group-flush">
                 @foreach ($notificacoes as $notif)
-                    <li class="list-group-item {{ $notif->lida ? '' : 'list-group-item-warning' }} py-3"
+                    <li class="list-group-item {{ $notif->lida ? '' : 'list-item-unread' }} py-3"
                         style="cursor:pointer;"
                         wire:click="abrirModal({{ $notif->id }})"
                         wire:key="notif-{{ $notif->id }}">

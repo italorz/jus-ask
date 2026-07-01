@@ -1,144 +1,130 @@
 <div class="container">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h1 class="h3 mb-0">Processos</h1>
-        @unless ($mostrarForm)
-            <button class="btn btn-primary" wire:click="novo">Novo processo</button>
-        @endunless
+        <h1 class="h4 mb-0">Processos</h1>
+        <a href="{{ route('processos.novo', ['tenant' => app(\App\Services\TenantManager::class)->tenant()]) }}"
+           class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-lg"></i> Novo
+        </a>
     </div>
 
     @if (session('status'))
-        <div class="alert alert-success">{{ session('status') }}</div>
+        <div class="alert alert-success alert-dismissible fade show py-2 mb-3">
+            {{ session('status') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
     @endif
     @if (session('warning'))
-        <div class="alert alert-warning">{{ session('warning') }}</div>
-    @endif
-
-    @if ($mostrarForm)
-        <div class="card mb-4">
-            <div class="card-header">{{ $processoId ? 'Editar processo' : 'Novo processo' }}</div>
-            <div class="card-body">
-                <form wire:submit="salvar">
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label">Cliente</label>
-                            <select class="form-select @error('clienteId') is-invalid @enderror" wire:model="clienteId">
-                                <option value="">— Sem cliente —</option>
-                                @foreach ($clientes as $cliente)
-                                    <option value="{{ $cliente->id }}">{{ $cliente->nome }}</option>
-                                @endforeach
-                            </select>
-                            @error('clienteId') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Número do processo *</label>
-                            <input type="text" class="form-control @error('numero') is-invalid @enderror" wire:model="numero">
-                            @error('numero') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Última atualização</label>
-                            <input type="date" class="form-control @error('ultimaAtualizacao') is-invalid @enderror" wire:model="ultimaAtualizacao">
-                            @error('ultimaAtualizacao') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                        </div>
-                        <div class="col-md-6 d-flex align-items-end">
-                            <div class="form-check">
-                                <input type="checkbox" class="form-check-input" id="ativo" wire:model="ativo">
-                                <label class="form-check-label" for="ativo">Processo ativo</label>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="mt-3">
-                        <button type="submit" class="btn btn-primary">Salvar</button>
-                        <button type="button" class="btn btn-outline-secondary" wire:click="cancelar">Cancelar</button>
-                    </div>
-                </form>
-            </div>
+        <div class="alert alert-warning alert-dismissible fade show py-2 mb-3">
+            {{ session('warning') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     @endif
 
-    {{-- Barra de pesquisa --}}
+    {{-- Filtros --}}
     <div class="card mb-3">
-        <div class="card-body">
+        <div class="card-body py-2">
             <div class="row g-2 align-items-end">
                 <div class="col-md-5">
-                    <label class="form-label mb-1 small text-muted">Pesquisar</label>
-                    <input type="text" class="form-control"
-                           placeholder="Número, assunto, tribunal, classe ou cliente (nome, CNPJ, CPF, e-mail, telefone)…"
-                           wire:model.live.debounce.400ms="busca">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control"
+                               placeholder="Número, assunto, tribunal, cliente…"
+                               wire:model.live.debounce.400ms="busca">
+                    </div>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label mb-1 small text-muted">Situação</label>
-                    <select class="form-select" wire:model.live="filtroSituacao">
-                        <option value="">Todas</option>
+                    <select class="form-select form-select-sm" wire:model.live="filtroSituacao">
+                        <option value="">Situação: todas</option>
                         <option value="em_andamento">Em andamento</option>
                         <option value="concluido">Concluído</option>
                     </select>
                 </div>
                 <div class="col-md-2">
-                    <label class="form-label mb-1 small text-muted">Monitorado</label>
-                    <select class="form-select" wire:model.live="filtroAtivo">
-                        <option value="">Todos</option>
-                        <option value="1">Ativo</option>
+                    <select class="form-select form-select-sm" wire:model.live="filtroAtivo">
+                        <option value="">Monitoramento: todos</option>
+                        <option value="1">Monitorado</option>
                         <option value="0">Inativo</option>
                     </select>
                 </div>
-                <div class="col-md-2 d-grid">
-                    <button class="btn btn-outline-secondary" wire:click="limparFiltros">Limpar</button>
+                <div class="col-md-2">
+                    <button class="btn btn-outline-secondary btn-sm w-100" wire:click="limparFiltros">
+                        <i class="bi bi-x-lg"></i> Limpar
+                    </button>
                 </div>
             </div>
         </div>
     </div>
 
     <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <span class="text-muted small">{{ $processos->total() }} processo(s) encontrado(s)</span>
-        </div>
         <div class="table-responsive">
             <table class="table table-hover mb-0 align-middle">
                 <thead>
                     <tr>
                         <th>Número</th>
                         <th>Cliente</th>
-                        <th>Última atualização</th>
                         <th>Situação</th>
-                        <th class="text-end">Ações</th>
+                        <th>Atualizado</th>
+                        <th class="text-end" style="width:110px">Ações</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse ($processos as $processo)
-                        <tr wire:key="processo-{{ $processo->id }}">
-                            <td>{{ $processo->numero }}</td>
-                            <td>{{ $processo->cliente?->nome ?? '—' }}</td>
-                            <td>{{ $processo->ultima_atualizacao?->format('d/m/Y') ?? '—' }}</td>
+                        <tr wire:key="proc-{{ $processo->id }}">
+                            <td class="font-monospace small">{{ $processo->numero }}</td>
+                            <td class="text-muted small">{{ $processo->cliente?->nome ?? '—' }}</td>
                             <td>
                                 @if ($processo->ativo)
-                                    <span class="badge bg-success">Ativo</span>
+                                    <span class="badge badge-ativo"><i class="bi bi-broadcast me-1"></i>Ativo</span>
                                 @else
-                                    <span class="badge bg-secondary">Encerrado</span>
+                                    <span class="badge badge-inativo">Inativo</span>
                                 @endif
                             </td>
+                            <td class="text-muted small">{{ $processo->ultima_atualizacao?->format('d/m/Y') ?? '—' }}</td>
                             <td class="text-end">
-                                <a href="{{ route('processos.detalhe', ['tenant' => app(\App\Services\TenantManager::class)->tenant(), 'processo' => $processo]) }}" class="btn btn-sm btn-outline-secondary">Conteúdo</a>
-                                <button class="btn btn-sm btn-outline-primary" wire:click="editar({{ $processo->id }})">Editar</button>
-                                <button class="btn btn-sm btn-outline-info"
-                                        wire:click="sincronizar({{ $processo->id }})"
-                                        wire:loading.attr="disabled"
-                                        wire:target="sincronizar({{ $processo->id }})">
-                                    <span wire:loading.remove wire:target="sincronizar({{ $processo->id }})">Sincronizar</span>
-                                    <span wire:loading wire:target="sincronizar({{ $processo->id }})">Sincronizando...</span>
-                                </button>
-                                <button class="btn btn-sm btn-outline-danger"
-                                        wire:click="excluir({{ $processo->id }})"
-                                        wire:confirm="Remover este processo?">Excluir</button>
+                                <div class="d-flex gap-1 justify-content-end">
+                                    <a href="{{ route('processos.detalhe', ['tenant' => app(\App\Services\TenantManager::class)->tenant(), 'processo' => $processo]) }}"
+                                       class="btn btn-ghost btn-icon btn-sm"
+                                       data-bs-toggle="tooltip" data-bs-title="Ver detalhes">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    <button class="btn btn-ghost btn-icon btn-sm"
+                                            wire:click="sincronizar({{ $processo->id }})"
+                                            wire:loading.attr="disabled"
+                                            wire:target="sincronizar({{ $processo->id }})"
+                                            data-bs-toggle="tooltip" data-bs-title="Sincronizar com PDPJ">
+                                        <span wire:loading.remove wire:target="sincronizar({{ $processo->id }})">
+                                            <i class="bi bi-arrow-clockwise"></i>
+                                        </span>
+                                        <span wire:loading wire:target="sincronizar({{ $processo->id }})">
+                                            <span class="spinner-border spinner-border-sm"></span>
+                                        </span>
+                                    </button>
+                                    <button class="btn btn-ghost btn-icon btn-sm btn-action-delete"
+                                            wire:click="excluir({{ $processo->id }})"
+                                            wire:confirm="Remover este processo?"
+                                            data-bs-toggle="tooltip" data-bs-title="Excluir">
+                                        <i class="bi bi-x-circle-fill"></i>
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="5" class="text-center text-muted py-4">Nenhum processo cadastrado.</td></tr>
+                        <tr>
+                            <td colspan="5">
+                                <div class="empty-state py-4">
+                                    <i class="bi bi-briefcase empty-icon"></i>
+                                    <div class="empty-title">Nenhum processo</div>
+                                    <div class="empty-sub">Clique em "Novo" para cadastrar.</div>
+                                </div>
+                            </td>
+                        </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
         @if ($processos->hasPages())
-            <div class="card-footer">
+            <div class="card-footer d-flex align-items-center justify-content-between">
+                <span class="text-muted small">{{ $processos->total() }} resultado(s)</span>
                 {{ $processos->links('pagination::bootstrap-5') }}
             </div>
         @endif

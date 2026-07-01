@@ -21,6 +21,7 @@ class Tarefa extends Model
         'cliente_id',
         'processo_id',
         'prazo',
+        'hora',
         'ordem',
     ];
 

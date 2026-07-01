@@ -43,7 +43,7 @@
                     <div class="card-body">
                         <h2 class="h5 mb-3">Claude Code</h2>
                         <p class="text-muted mb-2">No terminal:</p>
-                        <pre class="bg-light border rounded p-3 mb-2"><code>claude mcp add --transport http jus-ask {{ $mcpUrl }}</code></pre>
+                        <pre class="bg-light border rounded p-3 mb-2"><code>claude mcp add --transport http jusclaude {{ $mcpUrl }}</code></pre>
                         <p class="text-muted mb-0">
                             No primeiro uso, o Claude Code inicia o login OAuth automaticamente
                             (abre o navegador para autenticar). Confira com <code>claude mcp list</code>.

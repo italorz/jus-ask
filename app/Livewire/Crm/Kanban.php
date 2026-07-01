@@ -6,25 +6,30 @@ use App\Models\Cliente;
 use App\Models\Processo;
 use App\Models\Tarefa;
 use App\Services\TenantManager;
+use Carbon\Carbon;
 use Livewire\Component;
 
 class Kanban extends Component
 {
+    public string $modoVista = 'kanban'; // kanban | agenda
+
     public bool $mostrarForm = false;
 
-    public ?int $tarefaId = null;
-
-    public string $titulo = '';
+    public ?int   $tarefaId  = null;
+    public string $titulo    = '';
     public string $descricao = '';
-    public ?int $clienteId = null;
-    public ?int $processoId = null;
-    public string $prazo = '';
+    public ?int   $clienteId  = null;
+    public ?int   $processoId = null;
+    public string $prazo      = '';
+    public string $hora       = '';
     public string $statusForm = 'a_fazer';
 
-    public function mount()
+    public string $filtroAgenda = 'todos'; // todos | hoje | semana | mes
+
+    public function mount(): void
     {
         if (! app(TenantManager::class)->check()) {
-            return redirect()->route('home');
+            redirect()->route('home');
         }
     }
 
@@ -36,6 +41,7 @@ class Kanban extends Component
             'clienteId'  => ['nullable', 'integer', 'exists:clientes,id'],
             'processoId' => ['nullable', 'integer', 'exists:processos,id'],
             'prazo'      => ['nullable', 'date'],
+            'hora'       => ['nullable', 'date_format:H:i'],
             'statusForm' => ['required', 'in:a_fazer,fazendo,concluido'],
         ];
     }
@@ -50,13 +56,14 @@ class Kanban extends Component
     {
         $t = Tarefa::findOrFail($id);
 
-        $this->tarefaId   = $t->id;
-        $this->titulo     = (string) $t->titulo;
-        $this->descricao  = (string) $t->descricao;
-        $this->clienteId  = $t->cliente_id;
-        $this->processoId = $t->processo_id;
-        $this->prazo      = $t->prazo?->format('Y-m-d') ?? '';
-        $this->statusForm = $t->status;
+        $this->tarefaId    = $t->id;
+        $this->titulo      = (string) $t->titulo;
+        $this->descricao   = (string) $t->descricao;
+        $this->clienteId   = $t->cliente_id;
+        $this->processoId  = $t->processo_id;
+        $this->prazo       = $t->prazo?->format('Y-m-d') ?? '';
+        $this->hora        = (string) ($t->hora ?? '');
+        $this->statusForm  = $t->status;
         $this->mostrarForm = true;
     }
 
@@ -70,6 +77,7 @@ class Kanban extends Component
             'cliente_id'  => $dados['clienteId'] ?: null,
             'processo_id' => $dados['processoId'] ?: null,
             'prazo'       => $dados['prazo'] ?: null,
+            'hora'        => ($dados['hora'] ?? '') ?: null,
             'status'      => $dados['statusForm'],
         ];
 
@@ -90,7 +98,6 @@ class Kanban extends Component
         session()->flash('status', 'Tarefa removida.');
     }
 
-    /** Chamado pelo drag-and-drop: move a tarefa para outra coluna/posição. */
     public function mover(int $id, string $status, int $ordem = 0): void
     {
         if (! array_key_exists($status, Tarefa::STATUS)) {
@@ -106,9 +113,87 @@ class Kanban extends Component
 
     private function resetForm(): void
     {
-        $this->reset(['tarefaId', 'titulo', 'descricao', 'clienteId', 'processoId', 'prazo', 'mostrarForm']);
+        $this->reset(['tarefaId', 'titulo', 'descricao', 'clienteId', 'processoId', 'prazo', 'hora', 'mostrarForm']);
         $this->statusForm = 'a_fazer';
         $this->resetValidation();
+    }
+
+    private function construirAgenda(): array
+    {
+        $query = Tarefa::with(['cliente:id,nome', 'processo:id,numero'])
+            ->orderByRaw('CASE WHEN prazo IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('prazo')
+            ->orderByRaw('CASE WHEN hora IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('hora')
+            ->orderBy('id');
+
+        $hoje = Carbon::today();
+
+        match ($this->filtroAgenda) {
+            'hoje'  => $query->where('prazo', $hoje->toDateString()),
+            'semana' => $query->whereBetween('prazo', [
+                $hoje->toDateString(),
+                $hoje->copy()->endOfWeek(Carbon::SUNDAY)->toDateString(),
+            ]),
+            'mes'   => $query->whereBetween('prazo', [
+                $hoje->toDateString(),
+                $hoje->copy()->endOfMonth()->toDateString(),
+            ]),
+            default => null,
+        };
+
+        $tarefas = $query->get();
+        $grupos  = [];
+
+        foreach ($tarefas as $tarefa) {
+            if ($tarefa->prazo) {
+                $chave = $tarefa->prazo->format('Y-m-d');
+
+                if (! isset($grupos[$chave])) {
+                    $grupos[$chave] = [
+                        'chave'   => $chave,
+                        'label'   => $this->labelDia($tarefa->prazo),
+                        'data'    => ucfirst($tarefa->prazo->isoFormat('dddd, DD [de] MMMM [de] YYYY')),
+                        'passado' => $tarefa->prazo->lt($hoje) && ! $tarefa->prazo->isToday(),
+                        'hoje'    => $tarefa->prazo->isToday(),
+                        'tarefas' => [],
+                    ];
+                }
+
+                $grupos[$chave]['tarefas'][] = $tarefa;
+            } else {
+                if (! isset($grupos['sem_data'])) {
+                    $grupos['sem_data'] = [
+                        'chave'   => 'sem_data',
+                        'label'   => 'Sem data',
+                        'data'    => '',
+                        'passado' => false,
+                        'hoje'    => false,
+                        'tarefas' => [],
+                    ];
+                }
+
+                $grupos['sem_data']['tarefas'][] = $tarefa;
+            }
+        }
+
+        // "Sem data" sempre por último
+        if (isset($grupos['sem_data'])) {
+            $semData = $grupos['sem_data'];
+            unset($grupos['sem_data']);
+            $grupos['sem_data'] = $semData;
+        }
+
+        return array_values($grupos);
+    }
+
+    private function labelDia(Carbon $data): string
+    {
+        if ($data->isToday())     return 'Hoje';
+        if ($data->isTomorrow())  return 'Amanhã';
+        if ($data->isYesterday()) return 'Ontem';
+
+        return ucfirst($data->isoFormat('dddd'));
     }
 
     public function render()
@@ -119,16 +204,20 @@ class Kanban extends Component
             ->get()
             ->groupBy('status');
 
-        // Processos do cliente selecionado (para o select do formulário).
         $processos = $this->clienteId
             ? Processo::where('cliente_id', $this->clienteId)->orderBy('numero')->limit(200)->get(['id', 'numero'])
             : collect();
+
+        $agenda    = $this->modoVista === 'agenda' ? $this->construirAgenda() : [];
+        $hojeCount = Tarefa::where('prazo', Carbon::today()->toDateString())->count();
 
         return view('livewire.crm.kanban', [
             'colunas'   => Tarefa::STATUS,
             'tarefas'   => $tarefas,
             'clientes'  => Cliente::orderBy('nome')->get(['id', 'nome']),
             'processos' => $processos,
+            'agenda'    => $agenda,
+            'hojeCount' => $hojeCount,
         ])->extends('layouts.app');
     }
 }

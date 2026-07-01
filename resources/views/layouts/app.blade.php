@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" data-theme="light">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" data-theme="dark">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,11 +7,11 @@
     <title>{{ config('app.name', 'Jus-Ask') }}</title>
 
     {{-- Aplica data-theme antes do CSS para evitar flash --}}
-    <script>(function(){var t=localStorage.getItem('jus-theme')||'light';document.documentElement.setAttribute('data-theme',t);})();</script>
+    <script>(function(){var t=localStorage.getItem('jus-theme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 
     <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
 
@@ -118,27 +118,8 @@
             100% { top: 0; left: 0; width: 64px; height: 64px; opacity: 0; }
         }
 
-        /* ===== Paginação no tema escuro ===== */
-        [data-theme="dark"] .page-link {
-            background-color: var(--bg-surface);
-            border-color: var(--border);
-            color: var(--text);
-        }
-        [data-theme="dark"] .page-link:hover {
-            background-color: var(--bg-body);
-            border-color: var(--border);
-            color: var(--text);
-        }
-        [data-theme="dark"] .page-item.active .page-link {
-            background-color: var(--accent);
-            border-color: var(--accent);
-            color: #1c2b3a;
-        }
-        [data-theme="dark"] .page-item.disabled .page-link {
-            background-color: var(--bg-surface);
-            border-color: var(--border);
-            color: var(--text-muted);
-        }
+        /* ===== Topbar empresa label ===== */
+        .topbar-empresa-label { font-size:.7rem; opacity:.6; margin-right:.15rem; }
     </style>
 </head>
 <body>
@@ -152,7 +133,7 @@
             {{-- ===== Menu lateral ===== --}}
             <aside class="app-sidebar" id="appSidebar">
                 <div class="sidebar-brand">
-                    <a href="{{ url('/') }}"><span class="brand-icon">⚖</span>{{ config('app.name', 'Jus-Ask') }}</a>
+                    <a href="{{ url('/') }}"><i class="brand-icon bi bi-scale"></i>{{ config('app.name', 'Jus-Ask') }}</a>
                 </div>
 
                 <nav class="sidebar-nav">
@@ -197,6 +178,9 @@
                         <a class="sidebar-link {{ request()->routeIs('admin.empresas') ? 'active' : '' }}" href="{{ route('admin.empresas') }}">
                             <i class="ico bi bi-building"></i> Empresas
                         </a>
+                        <a class="sidebar-link {{ request()->routeIs('admin.db') ? 'active' : '' }}" href="{{ route('admin.db') }}">
+                            <i class="ico bi bi-database"></i> Banco de dados
+                        </a>
                     @endcan
                 </nav>
             </aside>
@@ -209,15 +193,15 @@
             <header class="app-topbar">
                 @auth
                     <button class="btn-sidebar-toggle" id="btnSidebarToggle" type="button"
-                            title="Ocultar/exibir menu" aria-label="Alternar menu">☰</button>
+                            aria-label="Alternar menu"><i class="bi bi-list"></i></button>
                 @endauth
 
-                <a class="topbar-brand {{ auth()->check() ? 'd-none d-md-none' : '' }}" href="{{ url('/') }}">
-                    <span style="color:var(--accent)">⚖</span> {{ config('app.name', 'Jus-Ask') }}
+                <a class="topbar-brand {{ auth()->check() ? 'd-none' : '' }}" href="{{ url('/') }}">
+                    <i class="bi bi-scale" style="color:var(--accent)"></i> {{ config('app.name', 'Jus-Ask') }}
                 </a>
 
                 <div class="topbar-right">
-                    <button id="btn-theme-toggle" title="Alternar tema claro/escuro">🌙</button>
+                    <button id="btn-theme-toggle" aria-label="Alternar tema"><i class="bi bi-sun-fill"></i></button>
 
                     @guest
                         @if (Route::has('login'))
@@ -228,25 +212,14 @@
                         @endif
                     @else
                         @if ($tenant->check())
-                            @php $notifCount = \App\Models\Notificacao::where('lida', false)->count(); @endphp
-                            <a class="nav-link position-relative px-2"
-                               href="{{ route('notificacoes', ['tenant' => $tenant->tenant()]) }}"
-                               title="Notificações">
-                                <i class="bi bi-bell fs-5"></i>
-                                @if ($notifCount > 0)
-                                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
-                                          style="font-size:.55rem;padding:.25em .45em;">
-                                        {{ $notifCount > 99 ? '99+' : $notifCount }}
-                                    </span>
-                                @endif
-                            </a>
+                            <livewire:notificacoes.notificacoes-painel />
                         @endif
 
                         @if (auth()->user()->empresas->isNotEmpty())
                             <div class="dropdown">
                                 <a class="nav-link dropdown-toggle" href="#" role="button"
                                    data-bs-toggle="dropdown" aria-expanded="false">
-                                    <span style="font-size:.73rem;opacity:.65;margin-right:.15rem;">empresa</span>
+                                    <span class="topbar-empresa-label">empresa</span>
                                     <strong>{{ $tenant->empresa()?->nome ?? '—' }}</strong>
                                 </a>
                                 <ul class="dropdown-menu dropdown-menu-end">
@@ -346,13 +319,17 @@
     @livewireScripts
 
     <script>
-        // Mostra o loader em ondas sempre que uma ação do Livewire demorar (> 250ms),
-        // para o usuário saber que precisa aguardar. Some assim que a resposta chega.
+        // Mostra o loader apenas quando o usuário faz uma ação explícita (método, $set, $toggle…).
+        // Polls automáticos (wire:poll, contagem de notificações, etc.) têm calls=[],
+        // portanto são ignorados e não bloqueiam a UI.
         document.addEventListener('livewire:init', () => {
             const overlay = document.getElementById('global-loading');
             if (!overlay) return;
 
-            Livewire.hook('commit', ({ respond }) => {
+            Livewire.hook('commit', ({ commit, respond }) => {
+                const isUserAction = Array.isArray(commit.calls) && commit.calls.length > 0;
+                if (!isUserAction) return;
+
                 const timer = setTimeout(() => overlay.classList.add('show'), 250);
                 respond(() => {
                     clearTimeout(timer);

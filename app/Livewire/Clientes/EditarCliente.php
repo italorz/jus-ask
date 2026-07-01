@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Clientes;
 
+use App\Models\ChaveGemini;
 use App\Models\Cliente;
 use App\Models\Processo;
 use App\Services\McpProcessoService;
@@ -17,7 +18,10 @@ class EditarCliente extends Component
     use WithPagination;
 
     public ?int $clienteId = null;
-    public string $abaAtiva = 'dados'; // dados | processos
+    public string $abaAtiva = 'dados'; // dados | processos | agente
+
+    // Configuração do agente IA
+    public ?int $chaveGeminiId = null;
 
     // Dados do cliente
     public string $nome = '';
@@ -57,7 +61,8 @@ class EditarCliente extends Component
             $this->bairro    = (string) $cliente->bairro;
             $this->cidade    = (string) $cliente->cidade;
             $this->estado    = (string) $cliente->estado;
-            $this->cep       = (string) $cliente->cep;
+            $this->cep           = (string) $cliente->cep;
+            $this->chaveGeminiId = $cliente->chave_gemini_id;
         }
     }
 
@@ -161,14 +166,35 @@ class EditarCliente extends Component
         session()->flash('status', 'Processo removido.');
     }
 
+    public function salvarAgente(): void
+    {
+        if (! $this->clienteId) {
+            session()->flash('status_agente', 'Salve o cliente antes de configurar o agente.');
+            return;
+        }
+
+        $this->validateOnly('chaveGeminiId', [
+            'chaveGeminiId' => ['nullable', 'integer', Rule::exists('chaves_gemini', 'id')],
+        ]);
+
+        Cliente::findOrFail($this->clienteId)->update([
+            'chave_gemini_id' => $this->chaveGeminiId ?: null,
+        ]);
+
+        session()->flash('status_agente', 'Configuração do agente salva.');
+    }
+
     public function render()
     {
         $processos = $this->clienteId
             ? Processo::where('cliente_id', $this->clienteId)->orderByDesc('ultima_atualizacao')->paginate(10)
             : null;
 
+        $chavesGemini = ChaveGemini::orderBy('apelido')->get();
+
         return view('livewire.clientes.editar-cliente', [
-            'processos' => $processos,
+            'processos'    => $processos,
+            'chavesGemini' => $chavesGemini,
         ])->extends('layouts.app');
     }
 }

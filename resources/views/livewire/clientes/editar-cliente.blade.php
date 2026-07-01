@@ -27,6 +27,12 @@
                 <i class="bi bi-folder me-1"></i> Processos
             </button>
         </li>
+        <li class="nav-item">
+            <button class="nav-link {{ $abaAtiva === 'agente' ? 'active' : '' }}"
+                    wire:click="$set('abaAtiva','agente')" @disabled(! $clienteId)>
+                <i class="bi bi-robot me-1"></i> Agente IA
+            </button>
+        </li>
     </ul>
 
     {{-- ===== Aba DADOS ===== --}}
@@ -100,6 +106,64 @@
                         </button>
                     </div>
                 </form>
+            </div>
+        </div>
+    @endif
+
+    {{-- ===== Aba AGENTE IA ===== --}}
+    @if ($abaAtiva === 'agente' && $clienteId)
+        <div class="card">
+            <div class="card-header fw-semibold">
+                <i class="bi bi-robot me-2"></i> Agente IA — WhatsApp
+            </div>
+            <div class="card-body">
+
+                @if (session('status_agente'))
+                    <div class="alert alert-success alert-dismissible fade show py-2">
+                        {{ session('status_agente') }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                @endif
+
+                <div class="mb-3" style="max-width: 480px;">
+                    <label class="form-label fw-semibold">
+                        Chave de API Gemini
+                        <button class="btn-help"
+                                data-bs-toggle="tooltip"
+                                data-bs-html="true"
+                                data-bs-title="Chave usada pelo agente ao responder este cliente no WhatsApp.<br><br><strong>Prioridade:</strong> chave do cliente → chave do escritório → variável GEMINI_API_KEY do servidor.">
+                            <i class="bi bi-question"></i>
+                        </button>
+                    </label>
+                    <select class="form-select @error('chaveGeminiId') is-invalid @enderror"
+                            wire:model="chaveGeminiId">
+                        <option value="">— Usar padrão do escritório —</option>
+                        @foreach ($chavesGemini as $chave)
+                            <option value="{{ $chave->id }}">
+                                {{ $chave->apelido ?: 'Chave #'.$chave->id }}
+                                ({{ $chave->chaveMascarada() }})
+                            </option>
+                        @endforeach
+                    </select>
+                    @error('chaveGeminiId')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                    <div class="form-text">
+                        Gerencie as chaves em
+                        <a href="{{ route('chaves-gemini', ['tenant' => app(\App\Services\TenantManager::class)->tenant()]) }}"
+                           target="_blank">Configurações → Chaves IA</a>.
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" wire:click="salvarAgente"
+                        wire:loading.attr="disabled" wire:target="salvarAgente">
+                    <span wire:loading.remove wire:target="salvarAgente">
+                        <i class="bi bi-check-lg me-1"></i> Salvar configuração
+                    </span>
+                    <span wire:loading wire:target="salvarAgente">
+                        <span class="spinner-border spinner-border-sm me-1"></span> Salvando…
+                    </span>
+                </button>
             </div>
         </div>
     @endif

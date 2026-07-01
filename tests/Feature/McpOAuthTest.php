@@ -19,7 +19,7 @@ class McpOAuthTest extends TestCase
     public function test_servidor_mcp_web_exige_autenticacao(): void
     {
         // Sem token OAuth no header, o guard auth:api deve recusar.
-        $this->postJson('/mcp/jus-ask', [
+        $this->postJson('/mcp/jusclaude', [
             'jsonrpc' => '2.0',
             'id' => 1,
             'method' => 'tools/list',
@@ -29,7 +29,7 @@ class McpOAuthTest extends TestCase
     public function test_metadata_oauth_do_recurso_protegido_e_publica(): void
     {
         // Endpoint de descoberta usado pelo cliente MCP para iniciar o fluxo OAuth.
-        $this->getJson('/.well-known/oauth-protected-resource/mcp/jus-ask')
+        $this->getJson('/.well-known/oauth-protected-resource/mcp/jusclaude')
             ->assertOk()
             ->assertJsonStructure(['authorization_servers']);
     }
@@ -92,7 +92,7 @@ class McpOAuthTest extends TestCase
         // Autentica no guard api (OAuth) sem passar pelo browser.
         Passport::actingAs($user, ['mcp:use']);
 
-        $this->postJson('/mcp/jus-ask', [
+        $this->postJson('/mcp/jusclaude', [
             'jsonrpc' => '2.0',
             'id' => 1,
             'method' => 'tools/call',
