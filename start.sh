@@ -8,6 +8,14 @@ echo "==> Preparando a aplicacao Laravel para producao"
 # Garante o link simbolico de storage (ignora erro se ja existir).
 php artisan storage:link || true
 
+# Gera as chaves de criptografia OAuth do Passport se ainda nao existirem.
+# Sem volume persistente para /app/storage, o container sobe "limpo" a cada
+# deploy; sem isso o MCP (auth:api) e qualquer fluxo OAuth quebra.
+if [ ! -f storage/oauth-private.key ] || [ ! -f storage/oauth-public.key ]; then
+    echo "==> Chaves OAuth do Passport nao encontradas, gerando novas"
+    php artisan passport:keys
+fi
+
 # Aplica as migracoes pendentes. --force e obrigatorio fora do ambiente local.
 php artisan migrate --force
 
