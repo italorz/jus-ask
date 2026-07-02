@@ -5,6 +5,7 @@ namespace App\Livewire\Processos;
 use App\Models\ConteudoProcesso;
 use App\Models\Notificacao;
 use App\Models\Processo;
+use App\Models\ProcessoCliente;
 use App\Models\ProcessoContato;
 use App\Models\ProcessoConteudo;
 use App\Services\ProcessoApiService;
@@ -23,6 +24,11 @@ class DetalheProcesso extends Component
     // Contatos de notificação
     public string $contatoTipo   = 'email';
     public string $contatoValor  = '';
+
+    // Aba ativa e vínculo de clientes (busca/modal ainda não implementados)
+    public string $abaAtiva       = 'movimentacoes';
+    public string $buscaCliente   = '';
+    public bool   $modalNovoCliente = false;
 
     public function mount(Processo $processo)
     {
@@ -173,7 +179,17 @@ class DetalheProcesso extends Component
                 ];
             });
 
+        $snap = $apiSnapshots->first();
+
         return view('livewire.processos.detalhe-processo', [
+            'processoId'   => $this->processo->id,
+            'snap'         => $snap,
+            'movimentos'   => collect($snap['movimentos'] ?? []),
+            // Busca de novos clientes para vincular ainda não implementada.
+            'vinculados'   => ProcessoCliente::where('processo_id', $this->processo->id)
+                ->with('cliente')
+                ->get(),
+            'clientesDisponiveis' => collect(),
             'conteudos'    => ConteudoProcesso::where('processo_id', $this->processo->id)
                 ->orderByDesc('created_at')
                 ->get(),
