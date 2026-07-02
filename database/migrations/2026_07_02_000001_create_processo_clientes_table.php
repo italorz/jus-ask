@@ -8,6 +8,12 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // A tabela ja existe em producao (criada antes da migration/model terem
+        // sido perdidos do repositorio); evita recriar em ambientes onde ja existe.
+        if (Schema::hasTable('processo_clientes')) {
+            return;
+        }
+
         Schema::create('processo_clientes', function (Blueprint $table) {
             $table->id();
             $table->foreignId('processo_id')->constrained('processos')->cascadeOnDelete();
